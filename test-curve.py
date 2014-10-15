@@ -10,7 +10,7 @@ Rp=0.2
 B=0.5
 
 #INCLINATION OF THE RINGS
-i=70.0*DEG
+i=85.0*DEG
 #RING TILT
 q=20.0*DEG
 
@@ -112,13 +112,13 @@ axc.set_xlim((xmin,xmax))
 axc.set_ylim((1.0-maxd,1.0+maxd/10))
 axn.grid()
 suffix="Rp_%e-i_%e-q_%e"%(Rp,i*RAD,q*RAD)
-fign.savefig("store/transit-curve-%s.png"%suffix)
+fign.savefig("plots/transit-curve-%s.png"%suffix)
 
 #########################################
 #ANIMATION
 #########################################
 try:
     print "Animating..."
-    system("convert -delay %s confs/*.png store/anim-%s.gif"%(argv[1],suffix))
+    system("convert -delay %s confs/*.png plots/anim-%s.gif"%(argv[1],suffix))
 except:
     pass

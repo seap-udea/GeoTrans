@@ -6,8 +6,6 @@ from matplotlib import patches as pat
 from cmath import sqrt as csqrt,phase
 from numpy import *
 from sys import argv,exit
-FIG=plt.figure(figsize=(8,8))
-AX=FIG.add_axes([0.1,0.1,0.8,0.8])
 
 ###################################################
 #MACROS
@@ -36,7 +34,6 @@ INSIDE=-1
 #//////////////////////////////
 #BEHAVIOR
 #//////////////////////////////
-VERBOS=0
 VERBOSE=[0]*10
 VERBOSE[0]=0
 VERBOSE[1]=1
@@ -462,6 +459,8 @@ def eIc(F1,F2):
     if len(ys)==0:
         return \
             Point(AR(123*qin,123*qin),F1,F2),\
+            Point(AR(123*qin,123*qin),F1,F2),\
+            Point(AR(123*qin,123*qin),F1,F2),\
             Point(AR(123*qin,123*qin),F1,F2)
     
     #SOLUTION
@@ -495,19 +494,41 @@ def eIc(F1,F2):
         
     if VERBOSE[3]:print "Intersection in x (qtrad = %d) = "%qtrad,xs
 
-    qps=[]
-    i=0
-    for x,y in zip(xs,ys):
-        if VERBOSE[3]:print "Testing couple: ",x,y
-        qps+=[pointInFigure(F1,toPoint(AR(x,y)))]
-        if VERBOSE[3]:print "Value: ",qps[i]
-        i+=1
-    qps=abs(array(qps))
-    iargs=qps.argsort()
+    lys=len(ys)
+    if lys>2:
+        qps=[]
+        i=0
+        for x,y in zip(xs,ys):
+            if VERBOSE[3]:print "Testing couple: ",x,y
+            qps+=[pointInFigure(F1,toPoint(AR(x,y)))]
+            if VERBOSE[3]:print "Value: ",qps[i]
+            i+=1
+        qps=abs(array(qps))
+        cond=(qps<=FIGTOL)
+        qps=qps[cond];xs=xs[cond];ys=ys[cond]
+        iargs=qps.argsort()
+        if len(qps)>2:
+            Ps=\
+                Point(AR(xs[iargs[0]],ys[iargs[0]]),F1,F2),\
+                Point(AR(xs[iargs[1]],ys[iargs[1]]),F1,F2),\
+                Point(AR(xs[iargs[2]],ys[iargs[2]]),F1,F2),\
+                Point(AR(xs[iargs[3]],ys[iargs[3]]),F1,F2)
+        else:
+            Ps=\
+                Point(AR(xs[iargs[0]],ys[iargs[0]]),F1,F2),\
+                Point(AR(xs[iargs[1]],ys[iargs[1]]),F1,F2),\
+                Point(AR(123,123),F1,F2),\
+                Point(AR(123,123),F1,F2)
+    else:
+        Ps=\
+            Point(AR(xs[0],ys[0]),F1,F2),\
+            Point(AR(xs[1],ys[1]),F1,F2),\
+            Point(AR(-123,-123),F1,F2),\
+            Point(AR(-123,-123),F1,F2)
     
-    return \
-        Point(AR(xs[iargs[0]],ys[iargs[0]]),F1,F2),\
-        Point(AR(xs[iargs[1]],ys[iargs[1]]),F1,F2)
+    if VERBOSE[3]:print "Points (%d): "%lys,Ps
+
+    return Ps
 
 def cIe(F1,F2):
     #Concentric circle (F2) and ellipse (F1)
@@ -760,21 +781,28 @@ def convexQuad(Ps,shapes=[+1,+1,+1,+1]):
     return Aq+Ac
 
 def convexPolygon(Ps):
+    if VERBOSE[3]:VERB("convexPolygon")
     nP=len(Ps)
     #if VERBOSE[0]:print "Sides of the polygon: ",nP
     if nP==0:
+        if VERBOSE[3]:print "No points."
         A=0.0
     elif nP==2:
+        if VERBOSE[3]:print "2 points: a leaf."
         A=leafArea(Ps)
     elif nP==3:
+        if VERBOSE[3]:print "3 points: a triangle."
         A=convexTriangle(Ps)
     elif nP==4:
+        if VERBOSE[3]:print "4 points: a quadrangle."
         A=convexQuad(Ps)
     elif nP==5:
+        if VERBOSE[3]:print "4 points: a pentagon."
         A1=convexQuad(Ps[:4],shapes=[+1,+1,+1,0])
         A2=convexTriangle((Ps[0],Ps[3],Ps[4]),shapes=[0,1,1])
         A=A1+A2
     elif nP==6:
+        if VERBOSE[3]:print "4 points: a hexagon."
         A1=convexQuad((Ps[:4]),shapes=[+1,+1,+1,0])
         A2=convexQuad((Ps[0],Ps[3],Ps[4],Ps[5]),shapes=[0,+1,+1,+1])
         A=A1+A2
@@ -829,96 +857,6 @@ def leafArea(Ps):
 #//////////////////////////////
 #TRANSIT AREA
 #//////////////////////////////
-def transitAreaAnalytic(C,Rp,Re,Ri,i):
-    #FIGURES
-    Cg=abs(C)
-    Star=Figure(AR(0.0,0.0),1.0,1.0,'Star')
-    Planet=Figure(Cg,Rp,Rp,'Planet')
-    Ringe=Figure(Cg,Re,Re*cos(i),'Ringe')
-    Ringi=Figure(Cg,Ri,Ri*cos(i),'Ringi')
-
-    #INTERSECTION POINTS
-    Psa=[]
-
-    #STAR AND PLANET
-    Psp1,Psp2=cIc(Planet,Star)
-    Psp1.name='Psp1';Psp2.name='Psp2';
-    Psa+=[Psp1,Psp2]
-    Asp=leafArea((Psp1,Psp2))
-    if VERBOSE[0]:print "Area planet inside star: ",Asp
-
-    #IF NO RINGS (i=90) USE ONLY PLANET
-    if abs(Ringe.b)<ZERO:
-        if VERBOSE[0]:print "Using only planet."
-        return Asp,Psa,Feqs
-
-    #STAR AND EXTERNAL RINGS
-    Psre1,Psre2=eIc(Ringe,Star)
-    Psre1.name='Psre1';Psre2.name='Psre2';
-    Psa+=[Psre1,Psre2]
-    Psn=[str(P) for P in Psa]
-    if VERBOSE[0]:print "Points Star-External Ring: ",Psre1.pos,Psre2.pos
-    
-    Psri1,Psri2=eIc(Ringi,Star)
-    Psri1.name='Psri1';Psri2.name='Psri2';
-    Psa+=[Psri1,Psri2]
-    Psn=[str(P) for P in Psa]
-    if VERBOSE[0]:print "Points Star-Internal Ring: ",Psri1.pos,Psri2.pos
-
-    Ppre1,Ppre2,Ppre3,Ppre4=cIe(Ringe,Planet)
-    Ppre1.name='Ppre1';Ppre2.name='Ppre2';
-    Ppre3.name='Ppre3';Ppre4.name='Ppre4';
-    Psa+=[Ppre1,Ppre2,Ppre3,Ppre4]
-    Ppri1,Ppri2,Ppri3,Ppri4=cIe(Ringi,Planet)
-    Ppri1.name='Ppri1';Ppri2.name='Ppri2';
-    Ppri3.name='Ppri3';Ppri4.name='Ppri4';
-    Psa+=[Ppri1,Ppri2,Ppri3,Ppri4]
-
-    #RING AREAS
-    Asre=leafArea((Psre1,Psre2))
-    if VERBOSE[0]:print "Area external ring inside star: ",Asre
-    Asri=leafArea((Psri1,Psri2))
-    if VERBOSE[0]:print "Area internal ring inside star: ",Asri
-
-    #COMMON POINTS
-    #EXTERNAL RING
-    Ps=array([Ppre1,Psre1,Ppre2,Psp2,Ppre3,Psre2,Ppre4,Psp1])
-    Fs=[Star,Planet,Star,Ringe,Star,Planet,Star,Ringe]
-    Qs=array([pointInFigure(F,P) for F,P in zip(Fs,Ps)])
-    Pine=sortPolygonVertices(Ps[Qs>0])
-    if VERBOSE[0]:print "External Ring Exclusion Points: ",pointNames(Pine)
-
-    #INTERNAL RING
-    Ps=array([Ppri1,Psri1,Ppri2,Psp2,Ppri3,Psri2,Ppri4,Psp1])
-    Fs=[Star,Planet,Star,Ringi,Star,Planet,Star,Ringi]
-    Qs=array([pointInFigure(F,P) for F,P in zip(Fs,Ps)])
-    Pini=sortPolygonVertices(Ps[Qs>0])
-    if VERBOSE[0]:print "Internal Ring Exclusion Points: ",pointNames(Pini)
-
-    #COMMON AREAS
-    if len(Pine)==0 or len(Pini)==0:
-        Pcusp=toPoint(AR(Planet.C[0],Planet.C[1]+Planet.b))
-        qcusp=pointInFigure(Star,Pcusp)
-        if VERBOSE[0]:print "Pcusp = ",Pcusp.pos
-        if VERBOSE[0]:print "Condition = ",qcusp
-
-    if len(Pine)==0:
-        if qcusp<0:Asrec=0.0
-        else:Asrec=Asp
-    else:Asrec=convexPolygon(Pine)
-    if len(Pini)==0:
-        if qcusp<0:Asric=0.0
-        else:Asric=Asp
-    else:Asric=convexPolygon(Pini)
-
-    if VERBOSE[0]:print "External ring common area: ",Asrec
-    if VERBOSE[0]:print "Internal ring common area: ",Asric
-
-    #TRANSIT AREA
-    Atrans=Asp+Asre-Asri-Asrec+Asric
-
-    return Atrans,Psa
-
 def transitFiguresAreaAnalytic(Planet,Ringe,Ringi):
 
     #BASIC PROPERTIES
@@ -962,18 +900,41 @@ def transitFiguresAreaAnalytic(Planet,Ringe,Ringi):
         return Asp,Psa,Feqs
 
     #STAR AND EXTERNAL RINGS
-    Psre1,Psre2=eIc(Ringe,Star)
+    qine=0;qoute=0
+    Psre1,Psre2,Psre3,Psre4=eIc(Ringe,Star)
     Psre1.name='Psre1';Psre2.name='Psre2';
-    Psa+=[Psre1,Psre2]
+    Psre3.name='Psre3';Psre4.name='Psre4';
+    Psa+=[Psre1,Psre2,Psre3,Psre4]
     Psn=[str(P) for P in Psa]
-    if VERBOSE[0]:print "Points Star-External Ring: ",Psre1.pos,Psre2.pos
-    #exit(0)
+    if VERBOSE[0]:print "Points Star-External Ring: ",Psre1.pos,Psre2.pos,Psre3.pos,Psre4.pos
+    #CHOOSE VALID POINTS
+    Psre=array([Psre1,Psre2,Psre3,Psre4])
+    qsre=array([P.pos[0] for P in Psre])
+    if len(qsre[qsre==123])==4:qine=1
+    if len(qsre[qsre==-123])==4:qoute=1
+    if VERBOSE[0]:print "qine, qoute: ",qine,qoute
+    if qine+qoute==0:
+        Fsre=[Ringe,Ringe,Ringe,Ringe]
+        Qsre=array([pointInFigure(F,P) for F,P in zip(Fsre,Psre)])
+        Psre=sortPolygonVertices(Psre[Qsre>-FIGTOL])
     
-    Psri1,Psri2=eIc(Ringi,Star)
+    qini=0;qouti=0
+    Psri1,Psri2,Psri3,Psri4=eIc(Ringi,Star)
     Psri1.name='Psri1';Psri2.name='Psri2';
-    Psa+=[Psri1,Psri2]
+    Psri3.name='Psri3';Psri4.name='Psri4';
+    Psa+=[Psri1,Psri2,Psri3,Psri4]
     Psn=[str(P) for P in Psa]
-    if VERBOSE[0]:print "Points Star-Internal Ring: ",Psri1.pos,Psri2.pos
+    if VERBOSE[0]:print "Points Star-Internal Ring: ",Psri1.pos,Psri2.pos,Psri3.pos,Psri4.pos
+    #CHOOSE VALID POINTS
+    Psri=array([Psri1,Psri2,Psri3,Psri4])
+    qsri=array([P.pos[0] for P in Psri])
+    if len(qsri[qsri==123])==4:qini=1
+    if len(qsri[qsri==-123])==4:qouti=1
+    if VERBOSE[0]:print "qini, qouti: ",qini,qouti
+    if qini+qouti==0:
+        Fsri=[Ringi,Ringi,Ringi,Ringi]
+        Qsri=array([pointInFigure(F,P) for F,P in zip(Fsri,Psri)])
+        Psri=sortPolygonVertices(Psri[Qsri>-FIGTOL])
     #exit(0)
 
     Ppre1,Ppre2,Ppre3,Ppre4=cIe(Ringe,Planet)
@@ -986,22 +947,31 @@ def transitFiguresAreaAnalytic(Planet,Ringe,Ringi):
     Psa+=[Ppri1,Ppri2,Ppri3,Ppri4]
 
     #RING AREAS
-    Asre=leafArea((Psre1,Psre2))
+    if qine+qoute==0:
+        Asre=convexPolygon(Psre)
+    else:
+        Asre=qine*figureArea(Ringe)
     if VERBOSE[0]:print "Area external ring inside star: ",Asre
-    Asri=leafArea((Psri1,Psri2))
+    if qini+qouti==0:
+        Asri=convexPolygon(Psri)
+    else:
+        Asri=qini*figureArea(Ringi)
     if VERBOSE[0]:print "Area internal ring inside star: ",Asri
+    #exit(0)
 
     #COMMON POINTS
     #EXTERNAL RING
-    Ps=array([Ppre1,Psre1,Ppre2,Psp2,Ppre3,Psre2,Ppre4,Psp1])
-    Fs=[Star,Planet,Star,Ringe,Star,Planet,Star,Ringe]
+    Ps=array([Ppre1,Psre1,Ppre2,Psp2,Ppre3,Psre2,Ppre4,Psp1,Psre3,Psre4])
+    Fs=[Star,Planet,Star,Ringe,Star,Planet,Star,Ringe,Planet,Planet]
     Qs=array([pointInFigure(F,P) for F,P in zip(Fs,Ps)])
     Pine=sortPolygonVertices(Ps[Qs>0])
-    if VERBOSE[0]:print "External Ring Exclusion Points: ",pointNames(Pine)
+    line=len(Pine)
+    if VERBOSE[0]:print "External Ring Exclusion Points (%d): "%line,pointNames(Pine)
+    #exit(0)
 
     #INTERNAL RING
-    Ps=array([Ppri1,Psri1,Ppri2,Psp2,Ppri3,Psri2,Ppri4,Psp1])
-    Fs=[Star,Planet,Star,Ringi,Star,Planet,Star,Ringi]
+    Ps=array([Ppri1,Psri1,Ppri2,Psp2,Ppri3,Psri2,Ppri4,Psp1,Psri3,Psri4])
+    Fs=[Star,Planet,Star,Ringi,Star,Planet,Star,Ringi,Planet,Planet]
     Qs=array([pointInFigure(F,P) for F,P in zip(Fs,Ps)])
     Pini=sortPolygonVertices(Ps[Qs>0])
     if VERBOSE[0]:print "Internal Ring Exclusion Points: ",pointNames(Pini)
@@ -1094,37 +1064,37 @@ def contactPosition(Planet,Ringe,Ringi,Ar,B,Phase=EGRESS,Side=OUTSIDE,tola=1E-3,
     Planet.C[0]=x1
     A1,Ps,Fs=transitFiguresAreaAnalytic(Planet,Ringe,Ringi);A1-=Ac
     ifun+=1
-    if VERBOS:print "x1,A1=",x1,A1
+    if VERBOSE[3]:print "x1,A1=",x1,A1
 
     #ADVANCE
     x2=x1+Side*Rp/2
     Planet.C[0]=x2
     A2,Ps,Fs=transitFiguresAreaAnalytic(Planet,Ringe,Ringi);A2-=Ac
     ifun+=1
-    if VERBOS:print "x2,A2=",x2,A2
+    if VERBOSE[3]:print "x2,A2=",x2,A2
 
-    if VERBOS:print "Direction of Transit: A2 - A1 = ",A2-A1
+    if VERBOSE[3]:print "Direction of Transit: A2 - A1 = ",A2-A1
 
     #FIRST EXTRAPOLATED POSITION
     while True:
-        if VERBOS:print "x1,x2 = ",x1,x2
+        if VERBOSE[3]:print "x1,x2 = ",x1,x2
         x=x1-(x2-x1)/(A2-A1)*A1
         Planet.C[0]=x
         A,Ps,Fs=transitFiguresAreaAnalytic(Planet,Ringe,Ringi);A-=Ac
         ifun+=1
-        if VERBOS:print "x,A = ",x,A
+        if VERBOSE[3]:print "x,A = ",x,A
         
         if A==0:
-            if VERBOS:print "Zero area."
+            if VERBOSE[3]:print "Zero area."
             while A2*A==0:
-                if VERBOS:print "Searching, x2,A2,x,A = ",x2,A2,x,A
+                if VERBOSE[3]:print "Searching, x2,A2,x,A = ",x2,A2,x,A
                 x=(x2+x)/2
                 Planet.C[0]=x
                 A,Ps,Fs=transitFiguresAreaAnalytic(Planet,Ringe,Ringi);A-=Ac
-                if VERBOS:print "x,A = ",x,A
+                if VERBOSE[3]:print "x,A = ",x,A
                 ifun+=1
-                if VERBOS:raw_input()
-            if VERBOS:print "After search, x2,A2,x,A = ",x2,A2,x,A
+                if VERBOSE[3]:raw_input()
+            if VERBOSE[3]:print "After search, x2,A2,x,A = ",x2,A2,x,A
 
         x1=x2
         A1=A2
@@ -1132,9 +1102,9 @@ def contactPosition(Planet,Ringe,Ringi,Ar,B,Phase=EGRESS,Side=OUTSIDE,tola=1E-3,
         A2=A
         dx=abs(x2-x1)/2
         if abs(A)<tola*abs(Ar) or dx<tolx or ifun>maxfun:break
-        if VERBOS:raw_input()
+        if VERBOSE[3]:raw_input()
 
-    if VERBOS:print "x,A=",x,A
+    if VERBOSE[3]:print "x,A=",x,A
     return x,abs(A),dx,ifun
 
 def ringedPlanetArea(Planet,Ringe,Ringi):
@@ -1219,26 +1189,6 @@ def ringedPlanetArea(Planet,Ringe,Ringi):
         P.pos=rotTrans(P.pos,t,AR(0.0,0.0))
 
     return Aringed,Psa
-
-def transitAreaMontecarlo(C,Rp,Re,Ri,i,NP=1E3):
-    Star=Figure(AR(0.0,0.0),1.0,1.0,'Star')
-    Planet=Figure(C,Rp,Rp,'Planet')
-    Ringe=Figure(C,Re,Re*cos(i),'Ringe')
-    Ringi=Figure(C,Ri,Ri*cos(i),'Ringi')
-
-    mA1,dA1,xs1,ys1=montecarloArea([Star,Ringe,Planet,Ringi],
-                                   [+1,+1,-1,-1],Npoints=NP)
-    mA2,dA2,xs2,ys2=montecarloArea([Star,Planet],
-                                   [+1,+1],Npoints=NP)
-    mA=mA1+mA2
-    dA=sqrt(dA1**2+dA2**2)
-    if dA>0:
-        nd=abs(log10(dA))+1
-        fmA="%%.%df"%nd
-        fmE="%%.%df"%(nd+1)
-        mA=float(fmA%mA)
-        dA=float(fmE%dA)
-    return mA,dA,concatenate((xs1,xs2)),concatenate((ys1,ys2))
 
 def transitFiguresAreaMontecarlo(Planet,Ringe,Ringi,NP=1E3):
     Star=Figure(AR(0.0,0.0),1.0,1.0,0.0,'Star')

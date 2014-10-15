@@ -8,8 +8,9 @@ axe=fige.gca()
 #########################################
 #INPUT PARAMETERS
 #########################################
-NP=5E3
-C=AR(-0.829,0.5)
+NP=1E3
+#C=AR(-0.829,0.5)
+C=AR(1.5,0.5)
 Rp=0.2
 
 #INCLINATION OF THE RINGS
@@ -62,7 +63,7 @@ plotEllipse(axe,Feqs[0])
 plotEllipse(axe,Feqs[1])
 plotEllipse(axe,Feqs[2])
 for P in Ps:
-    if ('Psri' in P.name) or True:
+    if ('re' in P.name) or False:
         plotPoint(axe,P,label=True)
 
 #MONTECARLO POINTS
@@ -77,11 +78,11 @@ RANGE=1.5
 axn.set_xlim((-RANGE*Re+C[0],RANGE*Re+C[0]))
 axn.set_ylim((-RANGE*Re+C[1],RANGE*Re+C[1]))
 axn.grid()
-fign.savefig("transitg.png")
+fign.savefig("plots/transit.png")
 
 C=Feqs[0].C
 RANGE=1.5
 axe.set_xlim((-RANGE*Re+C[0],RANGE*Re+C[0]))
 axe.set_ylim((-RANGE*Re+C[1],RANGE*Re+C[1]))
 axe.grid()
-fige.savefig("transitg-equivalent.png")
+fige.savefig("plots/transit-equivalent.png")

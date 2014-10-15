@@ -94,4 +94,4 @@ RANGE=1.5
 ax.set_xlim((-RANGE,RANGE))
 ax.set_ylim((-RANGE,RANGE))
 ax.grid()
-fig.savefig("contacts.png")
+fig.savefig("plots/contacts.png")

@@ -4,10 +4,9 @@ clean:
 	find . -name "*.pyc" -exec rm -rf {} \;
 
 cleandata:
-	rm -rf store/* tmp/*
+	rm -rf confs/* tmp/* plots/*
 
-deepclean:clean
-	rm -rf tmp/*
+cleanall:clean cleandata
 
 commit:
 	git commit -am "Commit"
