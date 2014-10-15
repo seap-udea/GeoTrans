@@ -1,0 +1,10 @@
+GeoTrans
+Transits of Geometrically Complex Objetcs
+=========================================
+
+ToDo
+====
+
+- Take into account the fact that a very eccentric non-concentric
+  ellipse could have 4 and not 2 intersection points with a circle.
+
