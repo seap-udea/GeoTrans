@@ -7,6 +7,8 @@ from cmath import sqrt as csqrt,phase
 from sys import argv,exit
 from os import system
 from numpy import *
+from constants import *
+from physics import *
 
 ###################################################
 #MACROS
@@ -29,6 +31,7 @@ BARL="*"*50+"\n"
 RBAR="\n"+"*"*50
 MAG=lambda P:sqrt(sum(P**2))
 AR=lambda x,y:array([x,y])
+AR3=lambda x,y,z:array([x,y,z])
 ARCTAN=lambda num,den:mod(arctan2(num,den),2*pi)
 EQUAL=lambda x,y:abs(x-y)<=ZERO
 def VERB(routine):print BARL,routine,RBAR
@@ -132,6 +135,21 @@ def toPoint(v):
 #//////////////////////////////
 #BASIC
 #//////////////////////////////
+def rotMat(axis,theta):
+    """
+    Rotation in 3d using Euler-Rodrigues formula
+    """
+    axis=asarray(axis)
+    axis=axis/sqrt(dot(axis,axis))
+    a=cos(theta/2)
+    b,c,d=-axis*sin(theta/2)
+    aa,bb,cc,dd=a*a,b*b,c*c,d*d
+    bc,ad,ac,ab,bd,cd=b*c,a*d,a*c,a*b,b*d,c*d
+    M=array([[aa+bb-cc-dd,2*(bc+ad),2*(bd-ac)],
+             [2*(bc-ad),aa+cc-bb-dd,2*(cd+ab)],
+             [2*(bd+ac),2*(cd-ab),aa+dd-bb-cc]])
+    return M
+
 def rotTrans(r,t,b):
     """
     Rotate and translate vector r by angle t and displ. b
@@ -300,6 +318,9 @@ def ellipseRadius(F,cost,sint):
     See Wikipedia/Ellipse
     """
     return F.a*F.b/((F.b*cost)**2+(F.a*sint)**2)**0.5
+
+def ellipseRadiusE(a,e,f):
+    return a*(1-e**2)/(1+e*cos(f))
 
 def ellipsePoint(F,cost,sint):
     """
@@ -1277,7 +1298,7 @@ def plotEllipse(ax,F,patch=False,**args):
     b=F.b
     t=F.t
     if patch:
-        cir=pat.Circle((F.C[0],F.C[1]),F.a)
+        cir=pat.Circle((F.C[0],F.C[1]),F.a,**args)
         ax.add_patch(cir)
     else:
         Es=linspace(0,2*pi,1000)
@@ -1285,7 +1306,7 @@ def plotEllipse(ax,F,patch=False,**args):
         ys=b*sin(Es)
         rs=array([rotTrans(AR(x,y),t,C) for x,y in zip(xs,ys)])
         ax.plot(rs[:,0],rs[:,1],'-',**args)
-        ax.plot([C[0]],[C[1]],'ko')
+        #ax.plot([C[0]],[C[1]],'ko')
         
 def plotPoint(ax,P,label=False,**args):
     """

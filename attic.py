@@ -1,0 +1,7 @@
+fs=linspace(0,2*pi,100)
+rs=ellipseRadiusE(ap/Rstar,ep,fs)
+xs=rs*cos(fs)
+ys=rs*sin(fs)
+zs=zeros_like(xs)
+rs=array([dot(Morb,AR3(x,y,z)) for x,y,z in zip(xs,ys,zs)])
+ax.plot(rs[:,0],rs[:,1])
