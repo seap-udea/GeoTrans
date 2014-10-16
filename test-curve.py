@@ -5,14 +5,15 @@ from sys import argv
 #########################################
 #INPUT PARAMETERS
 #########################################
+MC=1
 NP=1E3
 Rp=0.2
 B=0.5
 
 #INCLINATION OF THE RINGS
-i=85.0*DEG
+i=60.0*DEG
 #RING TILT
-q=20.0*DEG
+q=120.0*DEG
 
 fe=2.0
 fi=1.5
@@ -40,27 +41,19 @@ for x in Xs:
     Planet=Figure(C,Rp,Rp,0.0,'Planet')
     Ringe=Figure(C,Re,Re*cos(i),q,'Ringe')
     Ringi=Figure(C,Ri,Ri*cos(i),q,'Ringi')
-    At,Ps,Feqs=transitFiguresAreaAnalytic(Planet,Ringe,Ringi)
-    Ap,Ps,Feqs=transitFiguresAreaAnalytic(Planet,FNULL,FNULL)
-    FDIS.write("%e\n"%x)
+    At,Ps,Feqs=transitArea(Planet,Ringe,Ringi)
+    Ap,Ps,Feqs=transitArea(Planet,FNULL,FNULL)
     print "Analytic Area = %f"%At
     print "Analytic Area (only planet) = %f"%Ap
     xts+=[x];Ats+=[1-At/pi];Aps+=[1-Ap/pi]
 
-    """
-    Am,dA,xs,ys=transitFiguresAreaMontecarlo(Planet,Ringe,Ringi,NP=NP)
-    xss+=[x];mAs+=[1-Am/pi];dAs+=[dA/pi]
-    print "Montecarlo Area = %f +/- %f"%(Am,dA)
-    if dA>0:ns=abs(At-Am)/dA
-    else:ns=0
-    print "Discrepance = %f sigmas"%(ns)
-    Am,dA,xsn,ysn=transitFiguresAreaMontecarlo(Feqs[0],Feqs[1],Feqs[2],NP=NP)
-    print "Montecarlo Area Normalized = %f +/- %f"%(Am,dA)
-    if dA>0:ns=abs(At-Am)/dA
-    else:ns=0
-    print "Discrepance = %f sigmas"%(ns)
-    xss+=[x];mAs+=[1-Am/pi];dAs+=[dA/pi]
-    #"""
+    if MC:
+        Am,dA,xs,ys=transitAreaMontecarlo(Planet,Ringe,Ringi,NP=NP)
+        xss+=[x];mAs+=[1-Am/pi];dAs+=[dA/pi]
+        print "Montecarlo Area = %f +/- %f"%(Am,dA)
+        if dA>0:ns=abs(At-Am)/dA
+        else:ns=0
+        print "Discrepance = %f sigmas"%(ns)
 
     #CONFIGURATION PLOT
     fig=plt.figure(figsize=(16,8))
@@ -72,6 +65,8 @@ for x in Xs:
     plotEllipse(ax,Ringi,color='b')
     axc.plot(xts,Ats,'ko-',markersize=5)
     axc.plot(xts,Aps,'bo-',markersize=5)
+    if MC:
+        axc.errorbar(xss,mAs,yerr=dAs,linestyle='none',color='r')
     axc.set_xlim((xmin,xmax))
     maxd=(Rp**2+Re**2*cos(i)-Ri**2*cos(i))
     axc.set_ylim((1.0-maxd,1.0+maxd/10))
@@ -94,8 +89,8 @@ axn=fign.gca()
 
 axn.plot(Xs,Ats,'ko-',markersize=5)
 axn.plot(Xs,Aps,'bo-',markersize=5)
-#axn.plot(xss,mAs,'ro')
-#axn.errorbar(xss,mAs,yerr=dAs,linestyle='none',color='r')
+if MC:
+    axn.errorbar(xss,mAs,yerr=dAs,linestyle='none',color='r')
 
 #########################################
 #DECORATION
@@ -118,7 +113,7 @@ fign.savefig("plots/transit-curve-%s.png"%suffix)
 #ANIMATION
 #########################################
 try:
-    print "Animating..."
+    if len(argv)>1:print "\nAnimating..."
     system("convert -delay %s confs/*.png plots/anim-%s.gif"%(argv[1],suffix))
 except:
     pass

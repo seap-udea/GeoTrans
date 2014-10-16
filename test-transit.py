@@ -9,8 +9,7 @@ axe=fige.gca()
 #INPUT PARAMETERS
 #########################################
 NP=1E3
-#C=AR(-0.829,0.5)
-C=AR(1.5,0.5)
+C=AR(-0.829,0.5)
 Rp=0.2
 
 #INCLINATION OF THE RINGS
@@ -34,18 +33,14 @@ Ringi=Figure(C,Ri,Ri*cos(i),q,'Ringi')
 #########################################
 #AREAS
 #########################################
-At,Ps,Feqs=transitFiguresAreaAnalytic(Planet,Ringe,Ringi)
+At,Ps,Feqs=transitArea(Planet,Ringe,Ringi)
 print "Analytic Area = %f"%At
-Am,dA,xs,ys=transitFiguresAreaMontecarlo(Planet,Ringe,Ringi,NP=NP)
+Am,dA,xs,ys=transitAreaMontecarlo(Planet,Ringe,Ringi,NP=NP)
 print "Montecarlo Area = %f +/- %f"%(Am,dA)
 if dA>0:ns=abs(At-Am)/dA
 else:ns=0
 print "Discrepance = %f sigmas"%(ns)
-Am,dA,xsn,ysn=transitFiguresAreaMontecarlo(Feqs[0],Feqs[1],Feqs[2],NP=NP)
-print "Montecarlo Area Normalized = %f +/- %f"%(Am,dA)
-if dA>0:ns=abs(At-Am)/dA
-else:ns=0
-print "Discrepance = %f sigmas"%(ns)
+Am,dA,xsn,ysn=transitAreaMontecarlo(Feqs[0],Feqs[1],Feqs[2],NP=NP)
 
 #########################################
 #PLOT
