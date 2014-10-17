@@ -1061,6 +1061,19 @@ def transitArea(Planet,Ringe,Ringi):
 
     return Atrans,Psa,Feqs
 
+def transitAreaTime(t,orbit,Planet,Ringe,Ringi):
+    #COMPUTE PLANET CENTER POSITION
+    M=orbit.n*t
+    E=eccentricAnomalyFast(orbit.e,M)
+    rp=[orbit.a*cos(E)-orbit.a*orbit.e,orbit.b*sin(E),0.0]
+    rs=dot(orbit.Mos,rp)
+    Planet.C[0]=rs[0]
+    
+    #COMPUTE AREA
+    At,Ps,Fs=transitArea(Planet,Ringe,Ringi)
+    
+    return At
+
 def ringedPlanetBox(Planet,Ringe):
     """
     Determine the vertical limits of a box cointaining Planets and

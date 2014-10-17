@@ -4,7 +4,7 @@ from constants import *
 fig=plt.figure(figsize=(8,8))
 ax=fig.gca()
 T="\t"
-V=1
+V=0
 
 #########################################
 #PRIMARY PARAMETERS
@@ -33,8 +33,8 @@ tau=1.0 #Opacity
 #//////////////////////////////
 ap=1.0*AU
 ep=0.6
-iorb=89.8*DEG
-wp=45.0*DEG
+iorb=89.9*DEG
+wp=0.0*DEG
 
 #########################################
 #DERIVATIVE PARAMETERS
@@ -82,16 +82,39 @@ teff=-sign(rz[0])*ARCTAN(abs(rz[0]),abs(rz[1]))
 Porb=2*pi*sqrt(ap**3/(GCONST*(Mstar+Mp))) #Period (s)
 norb=2*pi/Porb
 #ANOMALIES
-fcen=mod(270*DEG-wp,360*DEG) #Central true anomaly (rad)
-Ecen=mod(2*arctan(sqrt((1-ep)/(1+ep))*tan(fcen/2)),360*DEG)
-Mcen=mod(Ecen-ep*sin(Ecen),360*DEG)
+fcen=270*DEG-wp #Central true anomaly (rad)
+Ecen=2*arctan(sqrt((1-ep)/(1+ep))*tan(fcen/2))
+Mcen=Ecen-ep*sin(Ecen)
+#print "fcen,Mcen,Ecen = ",fcen*RAD,Mcen*RAD,Ecen*RAD
 #TIME AND POSITION
 tcen=Mcen/norb
 rcen=ellipseRadiusE(ap,ep,fcen) #r central (km)
+rpcen=AR3(rcen*cos(fcen),rcen*sin(fcen),0)
+#print "rpcen f = ",rpcen
+#print ap*cos(Ecen)-ap*ep
+rpcen=AR3(ap*cos(Ecen)-ap*ep,ap*sqrt(1-ep**2)*sin(Ecen),0)
+#print "rpcen E = ",rpcen
+#print "r orbit cen = ",rpcen
+#print "Mos = ",Mos
 #PROJECTED POSITION
-Pcen=dot(Mos,AR3(rcen*cos(fcen),rcen*sin(fcen),0))
+Pcen=dot(Mos,rpcen)
+#print "r sky cen = ",Pcen
 #IMPACT PARAMETER
 Borb=Pcen[1]/Rstar
+#ESTIMATED TRANSIT DURATION
+if abs(Borb)>1:
+    print "No transit."
+    exit(1)
+df=Rstar*sqrt(1-Borb**2)/rcen
+f15=fcen-df
+r15=ellipseRadiusE(ap,ep,f15) 
+P15=dot(Mos,AR3(r15*cos(f15),r15*sin(f15),0))/Rstar
+t15=timeOrbit(ep,norb,f15)
+f35=fcen+df
+r35=ellipseRadiusE(ap,ep,f35) 
+t35=timeOrbit(ep,norb,f35)
+P35=dot(Mos,AR3(r35*cos(f35),r35*sin(f35),0))/Rstar
+dt=t35-t15
 
 #########################################
 #REPORT
@@ -132,6 +155,9 @@ if V:
     print T,"Central radius = %e km = %e AU = %e Rstar"%(rcen,rcen/AU,rcen/Rstar)
     print T,"Impact parameter = %e Rstar"%(Borb)
     print T,"Central time = %e s = %e Porb"%(tcen,tcen/Porb)
+    print T,"Estimated t1.5 = %e s = %e Porb"%(t15,t15/Porb)
+    print T,"Estimated t3.5 = %e s = %e Porb"%(t35,t35/Porb)
+    print T,"Estimated transit duration = %e s = %e h"%(dt,dt/3600.0)
 
 """
 Roll angle is taken in such a way that phir=0 defines the summer
@@ -149,10 +175,12 @@ Ringe=Figure(C,Re,Re*cos(ieff),teff,'Ringext')
 Ringi=Figure(C,Ri,Ri*cos(ieff),teff,'Ringint')
 
 #########################################
-#SCRIPT
+#TRANSIT
 #########################################
-df=Rstar/rcen
-print df
+POrbit=Orbit(ap/Rstar,ep,Porb,Mos)
+t=tcen+dt/2
+At=transitAreaTime(t,POrbit,Planet,Ringe,Ringi)
+print At
 
 #########################################
 #PLOT
@@ -161,8 +189,10 @@ print df
 plotEllipse(ax,Star,patch='true',fc='y',ec='none')
 plotEllipse(ax,Planet,patch='true',fc='b',ec='none')
 plotEllipse(ax,Ringe,color='k')
-#plotEllipse(ax,Ringi,color='k')
+plotEllipse(ax,Ringi,color='k')
 plotPoint(ax,toPoint(AR(Pcen[0],Pcen[1])))
+plotPoint(ax,toPoint(AR(P15[0],P15[1])))
+plotPoint(ax,toPoint(AR(P35[0],P35[1])))
 
 #PLOT ORBIT
 fs=linspace(fcen-1*DEG,fcen+1*DEG,100)
@@ -173,40 +203,12 @@ zs=zeros_like(xs)
 rs=array([dot(Mos,AR3(x,y,z)) for x,y,z in zip(xs,ys,zs)])
 ax.plot(rs[:,0],rs[:,1],'b-')
 
-#PLOT RINGS
-fs=linspace(0,2*pi,100)
-xs=Re*cos(fs)
-ys=Re*sin(fs)
-zs=zeros_like(xs)
-rs=array([dot(Mrs,AR3(x,y,z))+Pcen/Rstar for x,y,z in zip(xs,ys,zs)])
-for i in xrange(len(rs)):
-    c='k'
-    if (rs[i,2]-Pcen[2]/Rstar)<0:c='r'
-    ax.plot([rs[i,0]],[rs[i,1]],'o',markeredgecolor='none',color=c,markersize=2)
-
-#PLOT AXIS
-rp=3*Rp*rz+Pcen/Rstar
-ax.plot([Pcen[0]/Rstar,rp[0]],
-        [Pcen[1]/Rstar,rp[1]],'k-',linewidth=3)
-
-rp=3*Rp*ry+Pcen/Rstar
-ax.plot([Pcen[0]/Rstar,rp[0]],
-        [Pcen[1]/Rstar,rp[1]],'c-',linewidth=3)
-
-rp=3*Rp*rx+Pcen/Rstar
-ax.plot([Pcen[0]/Rstar,rp[0]],
-        [Pcen[1]/Rstar,rp[1]],'g-',linewidth=3)
-
-rp=3*Rp*AR3(cos(teff),sin(teff),0)+Pcen/Rstar
-ax.plot([Pcen[0]/Rstar,rp[0]],
-        [Pcen[1]/Rstar,rp[1]],'k-',linewidth=3)
-
 #########################################
 #DECORATION
 #########################################
 xrange=Pcen[0]/Rstar
 yrange=Pcen[1]/Rstar
-range=0.0*1.5+0.0*ap/Rstar+10*Rp
+range=0.0*1.5+0.0*ap/Rstar+15*Rp
 ax.set_xlim((-range+xrange,range+xrange))
 ax.set_ylim((-range+yrange,range+yrange))
 ax.grid()
