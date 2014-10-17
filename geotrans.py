@@ -1193,6 +1193,97 @@ def contactPosition(Planet,Ringe,Ringi,Ar,B,Phase=EGRESS,Side=OUTSIDE,tola=1E-3,
     if VERBOSE[3]:print "x,A=",x,A
     return x,abs(A),dx,ifun
 
+def contactTime(thalf,dthalf,orbit,Planet,Ringe,Ringi,Ar,B,Phase=EGRESS,Side=OUTSIDE,tola=1E-3,tolx=0.0,maxfun=10):
+    """
+    Calculate the contact position of a planet and their rings
+    thalf: Estimated time of half transit
+    dthalf: Initial time-step
+    orbit: Orbit of the planet
+
+    Ar: Area ringed planet
+    B: Impact parameter (|B|<~1+Rp+Re)
+    Side: Side of the transit, +1:OUTSIDE, -1:INSIDE
+    Phase: Phase of the transit, +1:EGRESS, -1:INGRESS
+    tola: Tolerance in fraction of ringed planet area (Ar)
+    tolx: Tolerance in fraction of star radius
+    maxfun: maximum number of callings to Area
+
+    Contacts are:
+    T1: INGRESS,OUTSIDE
+    T2: INGRESS,INSIDE
+    T3: EGRESS,INSIDE
+    T4: EGRESS,OUTSIDE
+
+    **OPTIMIZE
+    """
+    #COUNTERS
+    ifun=0
+    
+    #INPUT PARAMETERS
+    Rp=Planet.a
+    a=Ringe.a
+    b=Ringe.b
+    t=Ringe.t
+
+    #IMPACT PARAMETER
+    Planet.C[1]=B
+    
+    #CHECK EXTREMES IF BOXED ANALYSIS IS REQUIRED
+    if abs(B)>(1-Rp-a):
+        ymin,ymax=ringedPlanetBox(Planet,Ringe)
+        ys=[abs(ymin),abs(ymax)]
+        ylow=min(ys);yup=max(ys)
+        if abs(ylow)>1:return -1,-1,-1,-1
+        if abs(yup)>1:
+            if Side==INSIDE:return 0,0,0,0
+
+    #COMPARISON AREA
+    if Side>0:Ac=0
+    else:Ac=Ar
+
+    #CENTER OF INGRESS/EGRESS
+    x1=thalf
+    A1=transitAreaTime(x1,orbit,Planet,Ringe,Ringi)-Ac
+    ifun+=1
+    if VERBOSE[3]:print "x1,A1=",x1,A1
+
+    #ADVANCE
+    x2=x1+dthalf
+    A2=transitAreaTime(x2,orbit,Planet,Ringe,Ringi)-Ac
+    ifun+=1
+    if VERBOSE[3]:print "x2,A2=",x2,A2
+    if VERBOSE[3]:print "Direction of Transit: A2 - A1 = ",A2-A1
+
+    #MAIN LOOP
+    while True:
+        if VERBOSE[3]:print "x1,x2 = ",x1,x2
+        x=x1-(x2-x1)/(A2-A1)*A1
+        A=transitAreaTime(x,orbit,Planet,Ringe,Ringi)-Ac
+        ifun+=1
+        if VERBOSE[3]:print "x,A = ",x,A
+        
+        if A==0:
+            if VERBOSE[3]:print "Zero area."
+            while A2*A==0:
+                if VERBOSE[3]:print "Searching, x2,A2,x,A = ",x2,A2,x,A
+                x=(x2+x)/2
+                A=transitArea(x,orbit,Planet,Ringe,Ringi)-Ac
+                if VERBOSE[3]:print "x,A = ",x,A
+                ifun+=1
+                if VERBOSE[3]:raw_input()
+            if VERBOSE[3]:print "After search, x2,A2,x,A = ",x2,A2,x,A
+
+        x1=x2
+        A1=A2
+        x2=x
+        A2=A
+        dx=abs(x2-x1)/2
+        if abs(A)<tola*abs(Ar) or dx<tolx or ifun>maxfun:break
+        if VERBOSE[3]:raw_input()
+
+    if VERBOSE[3]:print "x,A=",x,A
+    return x,abs(A),dx,ifun
+
 def ringedPlanetArea(Planet,Ringe,Ringi):
     """
     Area of a planet with its rings

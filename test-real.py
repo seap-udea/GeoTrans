@@ -181,6 +181,8 @@ POrbit=Orbit(ap/Rstar,ep,Porb,Mos)
 t=tcen+dt/2
 At=transitAreaTime(t,POrbit,Planet,Ringe,Ringi)
 print At
+t,A,dt,nfun=contactTime(tcen-dt/2,dt/(Rstar/Rp/2),POrbit,Planet,Ringe,Ringi)
+print t
 
 #########################################
 #PLOT
