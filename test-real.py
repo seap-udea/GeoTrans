@@ -4,7 +4,7 @@ from constants import *
 fig=plt.figure(figsize=(8,8))
 ax=fig.gca()
 T="\t"
-V=0
+V=1
 
 #########################################
 #PRIMARY PARAMETERS
@@ -26,8 +26,9 @@ fp=1.0 #Oblateness
 fe=RSAT_ARING/RSAT #Exterior ring (Rp)
 fi=RSAT_BRING/RSAT #Interior ring (Rp)
 ir=30.0*DEG #Ring inclination
-phir=30.0*DEG #Ring roll angle
+phir=190.0*DEG #Ring roll angle
 tau=1.0 #Opacity
+
 #//////////////////////////////
 #ORBIT
 #//////////////////////////////
@@ -68,14 +69,12 @@ Rp=Rp/Rstar
 Ri=fi*Rp
 Re=fe*Rp
 
-#APARENT INCLINATION
-rax=dot(Mrs,[0.0,0.0,1.0])
-ieff=mod(arccos(dot(rax,[0,0,1])),pi/2)
-teff=ARCTAN(abs(rax[0]),abs(rax[1]))
-print ieff*RAD
-print teff*RAD
-rlo=dot(Mrs,[0.0,1.0,0.0])
-rtr=dot(Mrs,[1.0,0.0,0.0])
+#APARENT ORIENTATION
+rx=dot(Mrs,[1.0,0.0,0.0])
+ry=dot(Mrs,[0.0,1.0,0.0])
+rz=dot(Mrs,[0.0,0.0,1.0])
+ieff=arccos(abs(dot(rz,[0,0,1])))
+teff=-sign(rz[0])*ARCTAN(abs(rz[0]),abs(rz[1]))
 
 #//////////////////////////////
 #ORBIT
@@ -114,6 +113,8 @@ if V:
     print "Rings derivative:"
     print T,"Internal ring (relative) = %.2f Rstar"%(Ri)
     print T,"External ring (relative) = %.2f Rstar"%(Re)
+    print T,"Apparent inclination = %.2f deg"%(ieff*RAD)
+    print T,"Apparent roll = %.2f deg"%(teff*RAD)
     print "Orbit derivative:"
     print T,"Period = %e s = %e h = %e d = %e yr"%(Porb,Porb/HOUR,Porb/DAY,Porb/YEAR)
     print T,"Central anomaly = %e deg"%(fcen*RAD)
@@ -131,8 +132,8 @@ for the northern hemisphere
 Star=Figure(AR(0,0),1,1,0,'Star')
 C=AR(0.0,Borb)
 Planet=Figure(C,Rp,Rp,0,'Planet')
-Ringe=Figure(C,Re,Re*sin(ieff),teff,'Ringext')
-Ringi=Figure(C,Ri,Ri*sin(ieff),teff,'Ringint')
+Ringe=Figure(C,Re,Re*cos(ieff),teff,'Ringext')
+Ringi=Figure(C,Ri,Ri*cos(ieff),teff,'Ringint')
 
 #########################################
 #SCRIPT
@@ -169,15 +170,15 @@ for i in xrange(len(rs)):
     ax.plot([rs[i,0]],[rs[i,1]],'o',markeredgecolor='none',color=c,markersize=2)
 
 #PLOT AXIS
-rp=3*Rp*rax+Pcen/Rstar
+rp=3*Rp*rz+Pcen/Rstar
 ax.plot([Pcen[0]/Rstar,rp[0]],
         [Pcen[1]/Rstar,rp[1]],'k-',linewidth=3)
 
-rp=3*Rp*rlo+Pcen/Rstar
+rp=3*Rp*ry+Pcen/Rstar
 ax.plot([Pcen[0]/Rstar,rp[0]],
         [Pcen[1]/Rstar,rp[1]],'c-',linewidth=3)
 
-rp=3*Rp*rtr+Pcen/Rstar
+rp=3*Rp*rx+Pcen/Rstar
 ax.plot([Pcen[0]/Rstar,rp[0]],
         [Pcen[1]/Rstar,rp[1]],'g-',linewidth=3)
 
