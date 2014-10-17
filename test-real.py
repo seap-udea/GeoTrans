@@ -28,14 +28,13 @@ fi=RSAT_BRING/RSAT #Interior ring (Rp)
 ir=30.0*DEG #Ring inclination
 phir=190.0*DEG #Ring roll angle
 tau=1.0 #Opacity
-
 #//////////////////////////////
 #ORBIT
 #//////////////////////////////
 ap=1.0*AU
-ep=0.1
+ep=0.6
 iorb=89.8*DEG
-wp=0.0*DEG
+wp=45.0*DEG
 
 #########################################
 #DERIVATIVE PARAMETERS
@@ -79,10 +78,19 @@ teff=-sign(rz[0])*ARCTAN(abs(rz[0]),abs(rz[1]))
 #//////////////////////////////
 #ORBIT
 #//////////////////////////////
+#PERIOD
 Porb=2*pi*sqrt(ap**3/(GCONST*(Mstar+Mp))) #Period (s)
-fcen=270*DEG-wp #Central true anomaly (rad)
+norb=2*pi/Porb
+#ANOMALIES
+fcen=mod(270*DEG-wp,360*DEG) #Central true anomaly (rad)
+Ecen=mod(2*arctan(sqrt((1-ep)/(1+ep))*tan(fcen/2)),360*DEG)
+Mcen=mod(Ecen-ep*sin(Ecen),360*DEG)
+#TIME AND POSITION
+tcen=Mcen/norb
 rcen=ellipseRadiusE(ap,ep,fcen) #r central (km)
+#PROJECTED POSITION
 Pcen=dot(Mos,AR3(rcen*cos(fcen),rcen*sin(fcen),0))
+#IMPACT PARAMETER
 Borb=Pcen[1]/Rstar
 
 #########################################
@@ -117,9 +125,14 @@ if V:
     print T,"Apparent roll = %.2f deg"%(teff*RAD)
     print "Orbit derivative:"
     print T,"Period = %e s = %e h = %e d = %e yr"%(Porb,Porb/HOUR,Porb/DAY,Porb/YEAR)
-    print T,"Central anomaly = %e deg"%(fcen*RAD)
+    print T,"Mean Angular velocity = %e rad/s = %e Rstar/s = %e Rp/s"%(norb,norb*rcen/Rstar,norb*rcen/(Rp*Rstar))
+    print T,"Central true anomaly = %e deg"%(fcen*RAD)
+    print T,"Central eccentric anomaly = %e deg"%(Ecen*RAD)
+    print T,"Central mean anomaly = %e deg"%(Mcen*RAD)
     print T,"Central radius = %e km = %e AU = %e Rstar"%(rcen,rcen/AU,rcen/Rstar)
     print T,"Impact parameter = %e Rstar"%(Borb)
+    print T,"Central time = %e s = %e Porb"%(tcen,tcen/Porb)
+
 """
 Roll angle is taken in such a way that phir=0 defines the summer
 solstice for the northern hemisphere, phir=90 is the spring equinox
@@ -191,7 +204,7 @@ ax.plot([Pcen[0]/Rstar,rp[0]],
 #########################################
 xrange=Pcen[0]/Rstar
 yrange=Pcen[1]/Rstar
-range=0.0*1.5+0.0*ap/Rstar+5*Rp
+range=0.0*1.5+0.0*ap/Rstar+10*Rp
 ax.set_xlim((-range+xrange,range+xrange))
 ax.set_ylim((-range+yrange,range+yrange))
 ax.grid()
