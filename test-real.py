@@ -114,7 +114,7 @@ f35=fcen+df
 r35=ellipseRadiusE(ap,ep,f35) 
 t35=timeOrbit(ep,norb,f35)
 P35=dot(Mos,AR3(r35*cos(f35),r35*sin(f35),0))/Rstar
-dt=t35-t15
+dtrans=t35-t15
 
 #########################################
 #REPORT
@@ -157,7 +157,7 @@ if V:
     print T,"Central time = %e s = %e Porb"%(tcen,tcen/Porb)
     print T,"Estimated t1.5 = %e s = %e Porb"%(t15,t15/Porb)
     print T,"Estimated t3.5 = %e s = %e Porb"%(t35,t35/Porb)
-    print T,"Estimated transit duration = %e s = %e h"%(dt,dt/3600.0)
+    print T,"Estimated transit duration = %e s = %e h"%(dtrans,dtrans/3600.0)
 
 """
 Roll angle is taken in such a way that phir=0 defines the summer
@@ -178,11 +178,20 @@ Ringi=Figure(C,Ri,Ri*cos(ieff),teff,'Ringint')
 #TRANSIT
 #########################################
 POrbit=Orbit(ap/Rstar,ep,Porb,Mos)
+"""
 t=tcen+dt/2
 At=transitAreaTime(t,POrbit,Planet,Ringe,Ringi)
 print At
-t,A,dt,nfun=contactTime(tcen-dt/2,dt/(Rstar/Rp/2),POrbit,Planet,Ringe,Ringi)
-print t
+"""
+Ar,Ps=ringedPlanetArea(Planet,Ringe,Ringi)
+t1,A,dt,nfun=contactTime(tcen-dtrans/2,dtrans/(Rstar/Rp/2),POrbit,Planet,Ringe,Ringi,
+                         Ar,Borb,Side=OUTSIDE,Phase=INGRESS,tola=1E-6)
+t2,A,dt,nfun=contactTime(tcen-dtrans/2,dtrans/(Rstar/Rp/2),POrbit,Planet,Ringe,Ringi,
+                         Ar,Borb,Side=INSIDE,Phase=INGRESS,tola=1E-6)
+t3,A,dt,nfun=contactTime(tcen+dtrans/2,dtrans/(Rstar/Rp/2),POrbit,Planet,Ringe,Ringi,
+                         Ar,Borb,Side=INSIDE,Phase=EGRESS,tola=1E-6)
+t4,A,dt,nfun=contactTime(tcen+dtrans/2,dtrans/(Rstar/Rp/2),POrbit,Planet,Ringe,Ringi,
+                         Ar,Borb,Side=OUTSIDE,Phase=EGRESS,tola=1E-6)
 
 #########################################
 #PLOT
@@ -192,9 +201,9 @@ plotEllipse(ax,Star,patch='true',fc='y',ec='none')
 plotEllipse(ax,Planet,patch='true',fc='b',ec='none')
 plotEllipse(ax,Ringe,color='k')
 plotEllipse(ax,Ringi,color='k')
-plotPoint(ax,toPoint(AR(Pcen[0],Pcen[1])))
-plotPoint(ax,toPoint(AR(P15[0],P15[1])))
-plotPoint(ax,toPoint(AR(P35[0],P35[1])))
+#plotPoint(ax,toPoint(AR(Pcen[0],Pcen[1])))
+#plotPoint(ax,toPoint(AR(P15[0],P15[1])))
+#plotPoint(ax,toPoint(AR(P35[0],P35[1])))
 
 #PLOT ORBIT
 fs=linspace(fcen-1*DEG,fcen+1*DEG,100)

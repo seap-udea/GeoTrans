@@ -20,6 +20,7 @@ from physics import *
 ZERO=finfo(float).eps
 IMAGTOL=1E-5
 FIGTOL=1E-3
+NORINGTOL=1E-2
 
 #//////////////////////////////
 #MACROS
@@ -942,7 +943,7 @@ def transitArea(Planet,Ringe,Ringi):
     if VERBOSE[0]:print "Area planet inside star: ",Asp
 
     #IF NO RINGS (i=90) USE ONLY PLANET
-    if abs(Ringe.b)<ZERO:
+    if Ringe.b/Ringe.a<NORINGTOL:
         if VERBOSE[0]:print "Using only planet."
         return Asp,Psa,Feqs
 
@@ -1067,7 +1068,7 @@ def transitAreaTime(t,orbit,Planet,Ringe,Ringi):
     E=eccentricAnomalyFast(orbit.e,M)
     rp=[orbit.a*cos(E)-orbit.a*orbit.e,orbit.b*sin(E),0.0]
     rs=dot(orbit.Mos,rp)
-    Planet.C[0]=rs[0]
+    Planet.C[0]=Ringe.C[0]=Ringi.C[0]=rs[0]
     
     #COMPUTE AREA
     At,Ps,Fs=transitArea(Planet,Ringe,Ringi)
@@ -1267,7 +1268,7 @@ def contactTime(thalf,dthalf,orbit,Planet,Ringe,Ringi,Ar,B,Phase=EGRESS,Side=OUT
             while A2*A==0:
                 if VERBOSE[3]:print "Searching, x2,A2,x,A = ",x2,A2,x,A
                 x=(x2+x)/2
-                A=transitArea(x,orbit,Planet,Ringe,Ringi)-Ac
+                A=transitAreaTime(x,orbit,Planet,Ringe,Ringi)-Ac
                 if VERBOSE[3]:print "x,A = ",x,A
                 ifun+=1
                 if VERBOSE[3]:raw_input()

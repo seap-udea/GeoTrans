@@ -55,3 +55,18 @@ def eccentricAnomaly(e,M):
 
     E=M+e*(3*s-4*s**3)
     return E
+
+print "fcen = ",fcen*RAD
+print "tcen = ",tcen/Porb
+print "df = ",df*RAD
+print "f15 = ",f15*RAD
+print "f35 = ",f35*RAD
+print "t15 = ",t15/Porb
+print "t35 = ",t35/Porb
+print "dt = ",dtrans/Porb
+
+#PLOT POINTS
+plotPoint(ax,toPoint(AR(Pcen[0],Pcen[1])))
+plotPoint(ax,toPoint(AR(P15[0],P15[1])))
+plotPoint(ax,toPoint(AR(P35[0],P35[1])))
+
