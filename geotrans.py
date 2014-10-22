@@ -4,6 +4,7 @@
 from matplotlib import pyplot as plt
 from matplotlib import patches as pat
 from cmath import sqrt as csqrt,phase
+from scipy.optimize import newton,brentq,fsolve
 from sys import argv,exit
 from os import system
 from numpy import *
@@ -19,7 +20,7 @@ from physics import *
 #//////////////////////////////
 ZERO=finfo(float).eps
 IMAGTOL=1E-5
-FIGTOL=1E-3
+FIGTOL=8E-3
 NORINGTOL=1E-2
 
 #//////////////////////////////
@@ -35,8 +36,8 @@ AR=lambda x,y:array([x,y])
 AR3=lambda x,y,z:array([x,y,z])
 ARCTAN=lambda num,den:mod(arctan2(num,den),2*pi)
 EQUAL=lambda x,y:abs(x-y)<=ZERO
+TAB="\t"
 def VERB(routine):print BARL,routine,RBAR
-FIGUREAREA=lambda F:pi*F.a*F.b
 
 #//////////////////////////////
 #ALIASES
@@ -136,6 +137,10 @@ def toPoint(v):
 #//////////////////////////////
 #BASIC
 #//////////////////////////////
+def randomVal(xmin,xmax):
+    x=xmin+(xmax-xmin)*RAND()
+    return x
+
 def rotMat(axis,theta):
     """
     Rotation in 3d using Euler-Rodrigues formula
@@ -199,7 +204,8 @@ def FIGUREAREA(F):
     """
     Compute the area of figure F
     """
-    return pi*F.a*F.b
+    if F.b/F.a<NORINGTOL:return 0
+    else:return pi*F.a*F.b
 
 def ellipseCoefficients(F):
     """
@@ -330,6 +336,12 @@ def ellipsePoint(F,cost,sint):
     r=ellipseRadius(F,cost,sint)
     return AR(r*cost,r*sint)+F.C
 
+def ellipsePointEcc(F,cosE,sinE):
+    """
+    Coordinates of an ellipse point at angle t from center
+    """
+    return AR(F.a*cosE,F.b*sinE)+F.C
+
 def pointInFigure(F,P):
     """
     Evaluate if point P is in figure
@@ -337,6 +349,12 @@ def pointInFigure(F,P):
     Negative: Outside
     ** OPTIMIZE
     """
+    if EQUAL(F.a,F.b):
+        d=P.pos-F.C
+        r=MAG(d)
+        rf=F.a
+        return (rf-r)/r
+
     t=F.t
     d=P.pos-F.C
     d=rotTrans(d,-t,AR(0,0))
@@ -346,6 +364,7 @@ def pointInFigure(F,P):
     sint=d[1]/r
     rf=ellipseRadius(F,cost,sint)
     return (rf-r)/r
+
 
 #//////////////////////////////
 #INTERSECTION
@@ -477,6 +496,7 @@ def eIc(F1,F2):
             i+=1
 
         #GET THE POINTS CLOSER TO THE FIGURE
+        ysave=ys
         qps=abs(array(qps))
         cond=(qps<=FIGTOL)
         qps=qps[cond];xs=xs[cond];ys=ys[cond]
@@ -585,7 +605,7 @@ def ellipseSegmentOriented(F,P1,P2,sgn=+1):
     t1=ARCTAN(dr1[1]/b,dr1[0]/a)
     t2=ARCTAN(dr2[1]/b,dr2[0]/a)
     dt=abs(t2-t1)
-    if VERBOSE[0]:print "t1,t2,dt = ",t1*RAD,t2*RAD,dt*RAD
+    if VERBOSE[3]:print "t1,t2,dt = ",t1*RAD,t2*RAD,dt*RAD
 
     #FAKE SEGMENT
     if t1==t2:
@@ -817,10 +837,10 @@ def convexPolygon(Ps):
     **OPTIMIZE
     """
     if VERBOSE[3]:VERB("convexPolygon")
-
+    
     nP=len(Ps)
     if VERBOSE[3]:print "Sides of the polygon: ",nP
-    if nP==0:
+    if nP<=1:
         if VERBOSE[3]:print "No points."
         A=0.0
     elif nP==2:
@@ -842,6 +862,8 @@ def convexPolygon(Ps):
         A1=convexQuad((Ps[:4]),shapes=[+1,+1,+1,0])
         A2=convexQuad((Ps[0],Ps[3],Ps[4],Ps[5]),shapes=[0,+1,+1,+1])
         A=A1+A2
+    else:
+        print "An excessive number of polygon sides."
     return A
         
 def leafArea(Ps):
@@ -906,7 +928,9 @@ def transitArea(Planet,Ringe,Ringi):
 
     #BASIC PROPERTIES
     C=Planet.C
+    if VERBOSE[1]:print "*"*60
     if VERBOSE[1]:print "Original Center: ",C
+    if VERBOSE[1]:print "*"*60
 
     t=Ringe.t
     Rp=Planet.a
@@ -943,7 +967,7 @@ def transitArea(Planet,Ringe,Ringi):
     if VERBOSE[0]:print "Area planet inside star: ",Asp
 
     #IF NO RINGS (i=90) USE ONLY PLANET
-    if Ringe.b/Ringe.a<NORINGTOL:
+    if Ringe.a==0 or Ringe.b/Ringe.a<NORINGTOL:
         if VERBOSE[0]:print "Using only planet."
         return Asp,Psa,Feqs
 
@@ -963,9 +987,11 @@ def transitArea(Planet,Ringe,Ringi):
     if len(qsre[qsre==123])==4:qine=1
     if len(qsre[qsre==-123])==4:qoute=1
     if VERBOSE[0]:print "qine, qoute: ",qine,qoute
-    if qine+qoute==0:
+    if (qine+qoute)==0:
+        if VERBOSE[0]:print "Sorting Star-External Ring points"
         Fsre=[Ringe,Ringe,Ringe,Ringe]
         Qsre=array([pointInFigure(F,P) for F,P in zip(Fsre,Psre)])
+        if VERBOSE[0]:print "Scoring:",Qsre
         Psre=sortPolygonVertices(Psre[Qsre>-FIGTOL])
     
     #////////////////////////////////////////
@@ -984,9 +1010,11 @@ def transitArea(Planet,Ringe,Ringi):
     if len(qsri[qsri==123])==4:qini=1
     if len(qsri[qsri==-123])==4:qouti=1
     if VERBOSE[0]:print "qini, qouti: ",qini,qouti
-    if qini+qouti==0:
+    if (qini+qouti)==0:
+        if VERBOSE[0]:print "Sorting Star-Internal Ring points"
         Fsri=[Ringi,Ringi,Ringi,Ringi]
         Qsri=array([pointInFigure(F,P) for F,P in zip(Fsri,Psri)])
+        if VERBOSE[0]:print "Scoring:",Qsri
         Psri=sortPolygonVertices(Psri[Qsri>-FIGTOL])
     #exit(0)
 
@@ -1072,7 +1100,20 @@ def transitAreaTime(t,orbit,Planet,Ringe,Ringi):
     
     #COMPUTE AREA
     At,Ps,Fs=transitArea(Planet,Ringe,Ringi)
-    
+    return At
+
+def transitAreaTimeFast(t,tcs,Ar,orbit,Planet,Ringe,Ringi):
+    #DETERMINE TRANSIT DURATION
+    dtrans=tcs[-1]-tcs[0]
+    dtplanet=dtrans*Planet.a
+
+    #ONLY COMPUTE AREA IF AT INGRESS OR EGRESS PHASE
+    if t<=tcs[0]:At=0
+    elif t<=tcs[1]:At=transitAreaTime(t,orbit,Planet,Ringe,Ringi)
+    elif t<=tcs[2]:At=Ar
+    elif t<=tcs[3]:At=transitAreaTime(t,orbit,Planet,Ringe,Ringi)
+    else:At=0
+
     return At
 
 def ringedPlanetBox(Planet,Ringe):
@@ -1180,7 +1221,7 @@ def contactPosition(Planet,Ringe,Ringi,Ar,B,Phase=EGRESS,Side=OUTSIDE,tola=1E-3,
                 A,Ps,Fs=transitArea(Planet,Ringe,Ringi);A-=Ac
                 if VERBOSE[3]:print "x,A = ",x,A
                 ifun+=1
-                if VERBOSE[3]:raw_input()
+                #if VERBOSE[3]:raw_input()
             if VERBOSE[3]:print "After search, x2,A2,x,A = ",x2,A2,x,A
 
         x1=x2
@@ -1189,7 +1230,7 @@ def contactPosition(Planet,Ringe,Ringi,Ar,B,Phase=EGRESS,Side=OUTSIDE,tola=1E-3,
         A2=A
         dx=abs(x2-x1)/2
         if abs(A)<tola*abs(Ar) or dx<tolx or ifun>maxfun:break
-        if VERBOSE[3]:raw_input()
+        #if VERBOSE[3]:raw_input()
 
     if VERBOSE[3]:print "x,A=",x,A
     return x,abs(A),dx,ifun
@@ -1246,33 +1287,36 @@ def contactTime(thalf,dthalf,orbit,Planet,Ringe,Ringi,Ar,B,Phase=EGRESS,Side=OUT
     x1=thalf
     A1=transitAreaTime(x1,orbit,Planet,Ringe,Ringi)-Ac
     ifun+=1
-    if VERBOSE[3]:print "x1,A1=",x1,A1
+    if VERBOSE[1]:print "x1,A1=",x1,A1
 
     #ADVANCE
     x2=x1+dthalf
     A2=transitAreaTime(x2,orbit,Planet,Ringe,Ringi)-Ac
     ifun+=1
-    if VERBOSE[3]:print "x2,A2=",x2,A2
-    if VERBOSE[3]:print "Direction of Transit: A2 - A1 = ",A2-A1
+    if VERBOSE[1]:print "x2,A2=",x2,A2
+    if VERBOSE[1]:print "Direction of Transit: A2 - A1 = ",A2-A1
 
     #MAIN LOOP
     while True:
-        if VERBOSE[3]:print "x1,x2 = ",x1,x2
+        if VERBOSE[1]:print "x1,x2 = ",x1,x2
+        if VERBOSE[1]:print "A1,A2 = ",A1,A2
+        if VERBOSE[1]:print "A1/(A1-A2) = ",A1/(A1-A2)
+        if VERBOSE[1]:print "dx = ",(x2-x1)*A1/(A1-A2)
         x=x1-(x2-x1)/(A2-A1)*A1
         A=transitAreaTime(x,orbit,Planet,Ringe,Ringi)-Ac
         ifun+=1
-        if VERBOSE[3]:print "x,A = ",x,A
+        if VERBOSE[1]:print "x,A = ",x,A
         
         if A==0:
-            if VERBOSE[3]:print "Zero area."
+            if VERBOSE[1]:print "Zero area."
             while A2*A==0:
-                if VERBOSE[3]:print "Searching, x2,A2,x,A = ",x2,A2,x,A
+                if VERBOSE[1]:print "Searching, x2,A2,x,A = ",x2,A2,x,A
                 x=(x2+x)/2
                 A=transitAreaTime(x,orbit,Planet,Ringe,Ringi)-Ac
-                if VERBOSE[3]:print "x,A = ",x,A
+                if VERBOSE[1]:print "x,A = ",x,A
                 ifun+=1
-                if VERBOSE[3]:raw_input()
-            if VERBOSE[3]:print "After search, x2,A2,x,A = ",x2,A2,x,A
+                #if VERBOSE[1]:raw_input()
+            if VERBOSE[1]:print "After search, x2,A2,x,A = ",x2,A2,x,A
 
         x1=x2
         A1=A2
@@ -1280,10 +1324,29 @@ def contactTime(thalf,dthalf,orbit,Planet,Ringe,Ringi,Ar,B,Phase=EGRESS,Side=OUT
         A2=A
         dx=abs(x2-x1)/2
         if abs(A)<tola*abs(Ar) or dx<tolx or ifun>maxfun:break
-        if VERBOSE[3]:raw_input()
+        #if VERBOSE[1]:raw_input()
 
-    if VERBOSE[3]:print "x,A=",x,A
+    if VERBOSE[1]:print "x,A=",x,A
     return x,abs(A),dx,ifun
+
+def contactTimes(tcen,dtrans,orbit,Planet,Ringe,Ringi):
+    Ar,Ps=ringedPlanetArea(Planet,Ringe,Ringi)
+    dtp=Planet.a*dtrans/2
+    Borb=Planet.C[1]
+
+    t1,A,dt,nfun=contactTime(tcen-dtrans/2,dtp,orbit,Planet,Ringe,Ringi,
+                             Ar,Borb,Side=OUTSIDE,Phase=INGRESS,tola=1E-6)
+    if VERBOSE[0]:print "Contact time 1 = %.5f h"%((t1-tcen)/HOUR)
+    t2,A,dt,nfun=contactTime(tcen-dtrans/2,dtp,orbit,Planet,Ringe,Ringi,
+                             Ar,Borb,Side=INSIDE,Phase=INGRESS,tola=1E-6)
+    if VERBOSE[0]:print "Contact time 2 = %.5f h"%((t2-tcen)/HOUR)
+    t3,A,dt,nfun=contactTime(tcen+dtrans/2,dtp,orbit,Planet,Ringe,Ringi,
+                             Ar,Borb,Side=INSIDE,Phase=EGRESS,tola=1E-6)
+    if VERBOSE[0]:print "Contact time 3 = %.5f h"%((t3-tcen)/HOUR)
+    t4,A,dt,nfun=contactTime(tcen+dtrans/2,dtp,orbit,Planet,Ringe,Ringi,
+                             Ar,Borb,Side=OUTSIDE,Phase=EGRESS,tola=1E-6)
+    if VERBOSE[0]:print "Contact time 3 = %.5f h"%((t4-tcen)/HOUR)
+    return t1,t2,t3,t4
 
 def ringedPlanetArea(Planet,Ringe,Ringi):
     """
@@ -1297,7 +1360,9 @@ def ringedPlanetArea(Planet,Ringe,Ringi):
     Ria=Ringi.a
     Rib=Ringi.b
 
-    if EQUAL(Reb,ZERO):return pi*Rp**2,[]
+    if Reb/Rea<NORINGTOL:
+        if VERBOSE[0]:print "Only planet."
+        return pi*Rp**2,[]
     
     #PUTTING RINGS HORIZONTAL
     Ca=rotTrans(C,-t,AR(0,0))
@@ -1424,9 +1489,9 @@ def plotPoint(ax,P,label=False,**args):
         y=P.pos[1]+0.005
         ax.text(x,y,P.name,fontsize=10)
 
-#//////////////////////////////
+###################################################
 #NOTES FOR THIS RELEASE
-#//////////////////////////////
+###################################################
 """
 Convention for interior or exterior:
 
@@ -1434,3 +1499,209 @@ Convention for interior or exterior:
   assume that intersection points are 123 when one curve contains the
   other and -123 otherwise.
 """
+
+###################################################
+#ADDITIONAL
+###################################################
+def derivedSystemProperties(Mstar,Rstar,
+                            Mp,Rp,fp,
+                            fe,fi,tau,
+                            ap,ep,iorb,wp):
+    DPS=[]
+    
+    #ROTATION MATRICES
+    Mi=rotMat([1,0,0],-iorb)
+    Mw=rotMat([0,0,1],wp)
+    Mos=dot(Mi,Mw)
+    DPS+=[Mi,Mos]
+
+    Rp=Rp/Rstar
+    Ri=fi*Rp
+    Re=fe*Rp
+    DPS+=[Rp,Re,Ri]
+
+    Porb=2*pi*sqrt(ap**3/(GCONST*(Mstar+Mp))) #Period (s)
+    norb=2*pi/Porb
+    DPS+=[Porb,norb]
+
+    fcen=270*DEG-wp #Central true anomaly (rad)
+    Ecen=2*arctan(sqrt((1-ep)/(1+ep))*tan(fcen/2))
+    Mcen=Ecen-ep*sin(Ecen)
+    DPS+=[fcen]
+    
+    tcen=Mcen/norb
+    DPS+=[tcen]
+
+    rcen=ellipseRadiusE(ap,ep,fcen) #r central (km)
+    DPS+=[rcen]
+    
+    rpcen=AR3(rcen*cos(fcen),rcen*sin(fcen),0)
+    Pcen=dot(Mos,rpcen)
+    Borb=Pcen[1]/Rstar
+    DPS+=[Borb]
+    
+    qtransit=1
+    if abs(Borb)>1:qtransit=0
+    DPS+=[qtransit]
+    
+    return DPS
+
+def derivedRingProperties(phir,ir,
+                          Rstar,Rp,
+                          ap,ep,norb,Porb,Mi,Mos,
+                          rcen,fcen,Borb
+                          ):
+    DPS=[]
+    Mpr=rotMat([0,0,1],phir)
+    Mir=rotMat([1,0,0],-ir)
+    Mro=dot(Mpr,Mir)
+    Mrs=dot(Mi,Mro)
+    DPS+=[Mrs]
+
+    rx=dot(Mrs,[1.0,0.0,0.0])
+    ry=dot(Mrs,[0.0,1.0,0.0])
+    rz=dot(Mrs,[0.0,0.0,1.0])
+    ieff=arccos(abs(dot(rz,[0,0,1])))
+    teff=-sign(rz[0])*ARCTAN(abs(rz[0]),abs(rz[1]))
+    DPS+=[ieff,teff]
+
+    df=Rstar*sqrt(1-Borb**2)/rcen
+    f15=fcen-df
+    r15=ellipseRadiusE(ap,ep,f15) 
+    P15=dot(Mos,AR3(r15*cos(f15),r15*sin(f15),0))/Rstar
+    t15=timeOrbit(ep,norb,f15)
+    f35=fcen+df
+    r35=ellipseRadiusE(ap,ep,f35) 
+    t35=timeOrbit(ep,norb,f35)
+    P35=dot(Mos,AR3(r35*cos(f35),r35*sin(f35),0))/Rstar
+    if t15*t35<0 and t35<0:t35+=Porb
+    dtrans=t35-t15
+    DPS+=[dtrans]
+    dtplanet=dtrans*Rp
+    DPS+=[dtplanet]
+    
+    return DPS
+
+###################################################
+#NUMERICAL INTERSECTION
+###################################################
+def parsE(F):
+    a=F.a;a2=a**2
+    b=F.b;b2=b**2
+    x=F.C[0];x2=x**2
+    y=F.C[1];y2=y**2
+    return x,x2,y,y2,a,a2,b,b2
+
+def funsE(E):
+    sE=sin(E)
+    cE=cos(E)
+    s2E=2*sE*cE
+    c2E=cE**2-sE**2
+    return sE,cE,s2E,c2E
+    
+def trigFunc(E,F):
+    x,x2,y,y2,a,a2,b,b2=parsE(F)
+    sE,cE,s2E,c2E=funsE(E)
+    f=a2*cE**2+b2*sE**2+x2+y2+2*x*a*cE+2*y*b*sE-1
+    return f
+
+def trigFuncD(E,F):
+    x,x2,y,y2,a,a2,b,b2=parsE(F)
+    sE,cE,s2E,c2E=funsE(E)
+    f=(b2-a2)*s2E-2*x*a*sE+2*y*b*cE
+    return f
+
+def trigFuncD2(E,F):
+    x,x2,y,y2,a,a2,b,b2=parsE(F)
+    sE,cE,s2E,c2E=funsE(E)
+    f=2*(b2-a2)*c2E-2*x*a*cE-2*y*b*sE
+    return f
+
+VERB=0
+def uniqueRoots(Es,F,xtol=1E-3):
+    Er=sort(Es)
+    fEr=trigFunc(Er,F)
+    dEr=trigFuncD(Er,F)
+    zEs=array(zip(Er,fEr,dEr))
+    i=0
+    clusters=[]
+
+    while len(zEs)>0:
+        ilen=len(zEs)
+        ies=array(range(ilen))
+        if VERB:print "ies = ",ies
+        zE=zEs[0]
+        if VERB:print "zE = ",zE*RAD
+        dE=abs(zE[0]-zEs[:,0])
+        if VERB:print "zEs = ",zEs[:,0]*RAD
+        if VERB:print "dE = ",dE*RAD
+        if VERB:print "xtol = ",xtol*RAD
+        cond=dE<=xtol
+        ires=ies[cond]
+        if VERB:print "ires = ",ires
+        cluster=zEs[ires]
+        if VERB:print "Cluster = ",cluster
+        clusters+=[cluster]
+        zEs=delete(zEs,ires,axis=0)
+        if VERB:print "zEs = ",zEs
+        if VERB:raw_input()
+
+    roots=[]
+    for cluster in clusters:
+        if VERB:print "*"*80
+        isort=argsort(abs(cluster[:,2]))
+        if VERB:print "Sorted indexes: ",isort
+        cluster=cluster[isort]
+        #cluster[-1,2]*=-1
+        if VERB:print "Sorted cluster: ",cluster
+
+        while len(cluster)>0:
+            ilen=len(cluster)
+            root=cluster[0,0]
+            droot=cluster[0,2]
+            roots+=[root]
+            if VERB:print 
+            if VERB:print "Size of cluster = ",ilen
+            if VERB:print "Main root = ",root
+            if VERB:print "Derivative = ",droot
+            if VERB:print "Cummulative roots = ",roots
+            if ilen>1:
+                ies=array(range(ilen))
+                cond=droot*cluster[:,2]>0
+                ires=ies[cond]
+            else:
+                if VERB:print "Only one element."
+                ires=ilen*[0]
+
+            if VERB:print "Common roots = ",ires
+            if len(ires)==ilen:
+                if VERB:print "All values in cluster are the same."
+                if VERB:raw_input()
+                break
+            else:
+                cluster=delete(cluster,ires,axis=0)
+                if VERB:print "Remaining cluster = ",cluster
+            if VERB:raw_input()
+
+    if VERB:print "="*80
+    if VERB:print "Final roots = ",array(roots)*RAD
+    return roots
+
+def eIcE(F1,F2):
+    """
+    Computes the 4 intersection points between an ellipse
+    (F1) and an unitary circle (F2).
+    """
+    xtol=1E-10
+    E0=fsolve(trigFunc,0,args=(F1,),xtol=xtol)
+    E0=mod(E0,2*pi)
+    Es=linspace(E0,E0+2*pi,10)
+    Eos=fsolve(trigFunc,Es,args=(F1,),xtol=xtol)
+    Eos=mod(Eos,2*pi)
+    fEos=trigFunc(Eos,F1)
+    if VERB:print "Roots: ",zip(Eos*RAD,fEos)
+    cond=abs(fEos)<1E-3
+    Eos=Eos[cond]
+    xtol=3*DEG
+    Eos=uniqueRoots(Eos,F1,xtol=xtol)
+    return Eos
