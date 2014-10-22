@@ -8,8 +8,6 @@ from scipy.optimize import newton,brentq,fsolve
 from sys import argv,exit
 from os import system
 from numpy import *
-from constants import *
-from physics import *
 
 ###################################################
 #MACROS
@@ -36,6 +34,7 @@ AR=lambda x,y:array([x,y])
 AR3=lambda x,y,z:array([x,y,z])
 ARCTAN=lambda num,den:mod(arctan2(num,den),2*pi)
 EQUAL=lambda x,y:abs(x-y)<=ZERO
+DENSITY=lambda M,R:M/(4*pi/3*R**3)
 TAB="\t"
 def VERB(routine):print BARL,routine,RBAR
 
@@ -59,6 +58,40 @@ for i in xrange(10):
     if VERBOSE[i]==0:
         VERBOSE[i:]=[0]*(10-i)
         break
+
+#########################################
+#CONSTANTS
+#########################################
+#////////////////////
+#UNITS AND MULTIPLES
+#////////////////////
+KM=1E3
+DAY=const.day
+YEAR=const.year
+HOUR=const.hour
+MINUTE=const.minute
+
+#////////////////////
+#PLANETARY
+#////////////////////
+RJUP=69911.0*KM
+MJUP=1.898E27 #kg
+
+RSAT=58232.0*KM
+MSAT=5.6846E26 #kg
+
+RSAT_BRING=92000.0*KM
+RSAT_ARING=136775.0*KM
+
+RSUN=696342.0*KM
+MSUN=1.98855E30 #kg
+RHOSUN=MSUN/(4*pi/3*RSUN**3)
+
+#////////////////////
+#PHYSICAL CONSTANTS
+#////////////////////
+AU=149597871.0*KM
+GCONST=const.G
 
 ###################################################
 #DATA TYPES
@@ -95,6 +128,22 @@ class Figure(object):
         return s
 FNULL=Figure(AR(0,0),0,0,0,'')
 FONES=Figure(AR(0,0),1.0,1.0,0,'')
+
+class Orbit(object):
+    def __init__(self,a,e,P,Mos):
+        self.a=a
+        self.e=e
+        self.P=P
+        self.n=2*pi/P
+        self.b=a*sqrt(1-e*e)
+        self.Mos=Mos
+    def __str__(self):
+        s="("
+        s+="a = "+str(self.a)+","
+        s+="e = "+str(self.e)+","
+        s+="P = "+str(self.P)
+        s+=")"
+        return s
 
 ###################################################
 #CONFIGURATION
@@ -1705,3 +1754,77 @@ def eIcE(F1,F2):
     xtol=3*DEG
     Eos=uniqueRoots(Eos,F1,xtol=xtol)
     return Eos
+
+###################################################
+#PHYSICS ROUTINES
+###################################################
+#//////////////////////////////
+#KEPLER ORBITS
+#//////////////////////////////
+def timeOrbit(e,n,f):
+    E=2*arctan(sqrt((1-e)/(1+e))*tan(f/2))
+    M=E-e*sin(E)
+    t=M/n
+    return t
+
+def eccentricAnomaly(e,M):
+    """
+    Using a very simple method based on: 
+    Mikkola 1987
+    """
+    Ma=abs(M)
+    c=4*e+0.5
+    a=3*(1-e)/c
+    b=-Ma/c
+    y=sqrt(0.25*b*b+a*a*a/27.0)
+    x=(-0.5*b+y)**(1./3)-(0.5*b+y)**(1./3)
+    s=x-0.078*x**5/(1+e)
+    E=Ma+e*(3*s-4*s**3)
+    return sign(M)*E
+
+def EoK(E,e=0.0,M=0.0):
+    return E-e*sin(E)-M
+
+def eccentricAnomalyNumerical(e,M):
+    E=newton(EoK,M,args=(e,M),tol=1E-9)    
+    return E
+
+def eccentricAnomalyFast(e,M):
+    """
+    Mikkola, 1991
+    Code at: http://smallsats.org/2013/04/20/keplers-equation-iterative-and-non-iterative-solver-comparison/
+    """
+    if e==0:return M
+    a=(1-e)*3/(4*e+0.5);
+    b=-M/(4*e+0.5);
+    y=(b*b/4 +a*a*a/27)**0.5;
+    x=(-0.5*b+y)**(1./3)-(0.5*b+y)**(1./3);
+    w=x-0.078*x**5/(1 + e);
+    E=M+e*(3*w-4*x**3);
+
+    #NEWTON CORRECTION 1
+    f=(E-e*sin(E)-M);
+    fd=1-e*cos(E);
+    f2d=e*sin(E);
+    f3d=-e*cos(E);
+    f4d=e*sin(E);
+    E=E-f/fd*(1+\
+                  f*f2d/(2*fd*fd)+\
+                  f*f*(3*f2d*f2d-fd*f3d)/(6*fd**4)+\
+                  (10*fd*f2d*f3d-15*f2d**3-fd**2*f4d)*\
+                  f**3/(24*fd**6))
+
+    #NEWTON CORRECTION 2
+    f=(E-e*sin(E)-M);
+    fd=1-e*cos(E);
+    f2d=e*sin(E);
+    f3d=-e*cos(E);
+    f4d=e*sin(E);
+    E=E-f/fd*(1+\
+                  f*f2d/(2*fd*fd)+\
+                  f*f*(3*f2d*f2d-fd*f3d)/(6*fd**4)+\
+                  (10*fd*f2d*f3d-15*f2d**3-fd**2*f4d)*\
+                  f**3/(24*fd**6))
+    return E
+
+
