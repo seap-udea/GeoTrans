@@ -4,6 +4,7 @@
 from matplotlib import pyplot as plt
 from matplotlib import patches as pat
 from cmath import sqrt as csqrt,phase
+from scipy import constants as const
 from scipy.optimize import newton,brentq,fsolve
 from sys import argv,exit
 from os import system
@@ -12,14 +13,6 @@ from numpy import *
 ###################################################
 #MACROS
 ###################################################
-
-#//////////////////////////////
-#NUMERICAL CONSTANTS
-#//////////////////////////////
-ZERO=finfo(float).eps
-IMAGTOL=1E-5
-FIGTOL=8E-3
-NORINGTOL=1E-2
 
 #//////////////////////////////
 #MACROS
@@ -39,12 +32,36 @@ TAB="\t"
 def VERB(routine):print BARL,routine,RBAR
 
 #//////////////////////////////
+#NUMERICAL CONSTANTS
+#//////////////////////////////
+#MACHINE PRECISION
+ZERO=finfo(float).eps
+
+#TOLERANCE FOR INTERSECTION POINTS
+INTERTOL=1E-10
+
+#TOLERANCE FOR SELECTING INTERSECTION POINTS
+INTERFUNTOL=1E-3
+
+#TOLERANCE FOR ANGLE DETECTION IN INTERSECTION
+ANGLETOL=3*DEG
+
+#TOLERANCE FOR CALCULATING DISTANCE
+DISTANCETOL=1E-15
+
+IMAGTOL=1E-5
+FIGTOL=8E-3
+NORINGTOL=1E-2
+
+#//////////////////////////////
 #ALIASES
 #//////////////////////////////
 INGRESS=-1
 EGRESS=+1
 OUTSIDE=+1
 INSIDE=-1
+CLOSEST=-1
+FARTHEST=+1
 
 #//////////////////////////////
 #DEBUGGING
@@ -1634,6 +1651,7 @@ def derivedRingProperties(phir,ir,
 ###################################################
 #NUMERICAL INTERSECTION
 ###################################################
+VERB=0
 def parsE(F):
     a=F.a;a2=a**2
     b=F.b;b2=b**2
@@ -1666,7 +1684,6 @@ def trigFuncD2(E,F):
     f=2*(b2-a2)*c2E-2*x*a*cE-2*y*b*sE
     return f
 
-VERB=0
 def uniqueRoots(Es,F,xtol=1E-3):
     Er=sort(Es)
     fEr=trigFunc(Er,F)
@@ -1736,24 +1753,61 @@ def uniqueRoots(Es,F,xtol=1E-3):
     if VERB:print "Final roots = ",array(roots)*RAD
     return roots
 
-def eIcE(F1,F2):
+def ellipseDistanceDerivative(s,F,sgn):
+    """
+    Calculate the derivative of an ellipse point to origin
+    """
+    c=sgn*(1-s*s)**0.5
+    f=(F.b*F.b-F.a*F.a)*s*c-F.a*F.C[0]*s+F.b*F.C[1]*c    
+    return f
+
+def extremePoint(Ellipse,sgn=-1):
+    sE=brentq(ellipseDistanceDerivative,0,sgn,
+              args=(Ellipse,sgn),xtol=DISTANCETOL)
+    cE=sgn*(1-sE**2)**0.5
+    d=ellipsePointEcc(Ellipse,cE,sE)
+    D=MAG(d)
+    cP=d[0]/D
+    sP=d[1]/D
+    return cE,sE,cP,sP,D
+
+def extremePointGeneral(Ellipse,sgn=-1):
+    C=rotTrans(Ellipse.C,-Ellipse.t,AR(0,0))
+    EllipseCor=Figure(C,
+                      Ellipse.a,Ellipse.b,
+                      0.0,'Corrected')
+    print "Equivalent Center = ",EllipseCor.C
+    EllipseCor.C=abs(EllipseCor.C)
+    cE,sE,cP,sP,D=extremePoint(EllipseCor,sgn=sgn)
+    return cE,sE,cP,sP,D,EllipseCor
+
+def eIcNumerical(F1,F2):
     """
     Computes the 4 intersection points between an ellipse
     (F1) and an unitary circle (F2).
     """
-    xtol=1E-10
+    
+    #FIND THE FIRST GUESS
+    xtol=INTERTOL
     E0=fsolve(trigFunc,0,args=(F1,),xtol=xtol)
     E0=mod(E0,2*pi)
+    
+    #CREATE AN ARRAY OF SEARCHING POINTS
     Es=linspace(E0,E0+2*pi,10)
+
+    #SOLVE AROUND SEARCHING POINTS
     Eos=fsolve(trigFunc,Es,args=(F1,),xtol=xtol)
     Eos=mod(Eos,2*pi)
+
+    #SELECT ONLY THOSE POINTS FULFILLING FUNCTION 
     fEos=trigFunc(Eos,F1)
-    if VERB:print "Roots: ",zip(Eos*RAD,fEos)
-    cond=abs(fEos)<1E-3
+    cond=abs(fEos)<INTERFUNTOL
     Eos=Eos[cond]
-    xtol=3*DEG
-    Eos=uniqueRoots(Eos,F1,xtol=xtol)
-    return Eos
+
+    #SELECT UNIQUE ROOTS
+    Eos=uniqueRoots(Eos,F1,xtol=ANGLETOL)
+
+    return array(Eos)
 
 ###################################################
 #PHYSICS ROUTINES
@@ -1826,5 +1880,3 @@ def eccentricAnomalyFast(e,M):
                   (10*fd*f2d*f3d-15*f2d**3-fd**2*f4d)*\
                   f**3/(24*fd**6))
     return E
-
-
