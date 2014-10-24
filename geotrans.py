@@ -1303,22 +1303,16 @@ def transitAreaOblate(S):
     #////////////////////////////////////////
     #INTERSECTION METHOD
     #////////////////////////////////////////
-    #eIc=eIcAnalytical
     Planet=S.Planet
-    Ringe=S.Ringext
-    Ringi=S.Ringint
 
     #////////////////////////////////////////
     #BASIC PROPERTIES
     #////////////////////////////////////////
     C=Planet.C
-    ct=Ringe.cost
-    st=Ringe.sint
-    Rp=Planet.a
-    Rea=Ringe.a
-    Reb=Ringe.b
-    Ria=Ringi.a
-    Rib=Ringi.b
+    ct=Planet.cost
+    st=Planet.sint
+    Rpa=Planet.a
+    Rpb=Planet.b
 
     #////////////////////////////////////////
     #FIGURES ORIENTATION FIX
@@ -1329,10 +1323,8 @@ def transitAreaOblate(S):
     Cg=abs(Ca)
     #FIGURES IN NORMAL POSITION
     Star=Figure(AR(0.0,0.0),1.0,1.0,1.0,0.0,'Star')
-    Planet=Figure(Cg,Rp,Rp,1.0,0.0,'Planet')
-    Ringe=Figure(Cg,Rea,Reb,1.0,0.0,'Ringe')
-    Ringi=Figure(Cg,Ria,Rib,1.0,0.0,'Ringi')
-    Feqs=[Planet,Ringe,Ringi]
+    Planet=Figure(Cg,Rpa,Rpb,1.0,0.0,'Planet')
+    Feqs=[Planet]
 
     #INTERSECTION POINTS
     Psa=[]
@@ -1340,121 +1332,30 @@ def transitAreaOblate(S):
     #////////////////////////////////////////
     #STAR AND PLANET
     #////////////////////////////////////////
-    Psp1,Psp2=cIc(Planet,Star)
-    Psp1.name='Psp1';Psp2.name='Psp2';
-    Psa+=[Psp1,Psp2]
-    Asp=leafArea((Psp1,Psp2))
-
-    #////////////////////////////////////////
-    #IF NO RINGS (i=90) USE ONLY PLANET
-    #////////////////////////////////////////
-    if Ringe.a==0 or Reb/Rea<NORINGTOL:
-        return Asp,Asp,0,0,0,0,Psa,Feqs
-
-    #////////////////////////////////////////
-    #PLANET AND RINGS
-    #////////////////////////////////////////
-    Ppre1,Ppre2,Ppre3,Ppre4=cIe(Ringe,Planet)
-    Ppre1.name='Ppre1';Ppre2.name='Ppre2';
-    Ppre3.name='Ppre3';Ppre4.name='Ppre4';
-    Psa+=[Ppre1,Ppre2,Ppre3,Ppre4]
-    Ppri1,Ppri2,Ppri3,Ppri4=cIe(Ringi,Planet)
-    Ppri1.name='Ppri1';Ppri2.name='Ppri2';
-    Ppri3.name='Ppri3';Ppri4.name='Ppri4';
-    Psa+=[Ppri1,Ppri2,Ppri3,Ppri4]
-
-    #////////////////////////////////////////
-    #STAR AND EXTERNAL RINGS
-    #////////////////////////////////////////
     qine=0;qoute=0
-    Psre1,Psre2,Psre3,Psre4=eIc(Ringe,Star)
-    Psre1.name='Psre1';Psre2.name='Psre2';
-    Psre3.name='Psre3';Psre4.name='Psre4';
-    Psa+=[Psre1,Psre2,Psre3,Psre4]
+    Psp1,Psp2,Psp3,Psp4=eIc(Planet,Star)
+    Psp1.name='Psp1';Psp2.name='Psp2';
+    Psp3.name='Psp3';Psp4.name='Psp4';
+    Psa+=[Psp1,Psp2,Psp3,Psp4]
     Psn=[str(P) for P in Psa]
-    Psre=array([Psre1,Psre2,Psre3,Psre4])
-    qsre=array([P.pos[0] for P in Psre])
-    if len(qsre[qsre==123])==4:qine=1
-    if len(qsre[qsre==-123])==4:qoute=1
+    Psp=array([Psp1,Psp2,Psp3,Psp4])
+    qsp=array([P.pos[0] for P in Psp])
+    if len(qsp[qsp==123])==4:qine=1
+    if len(qsp[qsp==-123])==4:qoute=1
     if (qine+qoute)==0:
-        Fsre=[Ringe,Ringe,Ringe,Ringe]
-        Qsre=array(\
+        Fsp=[Planet,Planet,Planet,Planet]
+        Qsp=array(\
             [pointInFigure(F,P)\
-                 for F,P in zip(Fsre,Psre)])
-        Psre=sortPolygonVertices(Psre[Qsre>-FIGTOL])
-        Asre=convexPolygon(Psre)
+                 for F,P in zip(Fsp,Psp)])
+        Psp=sortPolygonVertices(Psp[Qsp>-FIGTOL])
+        Asp=convexPolygon(Psp)
     else:
-        Asre=qine*FIGUREAREA(Ringe)
-    
-    #////////////////////////////////////////
-    #STAR AND INTERNAL RINGS
-    #////////////////////////////////////////
-    qini=0;qouti=0
-    Psri1,Psri2,Psri3,Psri4=eIc(Ringi,Star)
-    Psri1.name='Psri1';Psri2.name='Psri2';
-    Psri3.name='Psri3';Psri4.name='Psri4';
-    Psa+=[Psri1,Psri2,Psri3,Psri4]
-    Psn=[str(P) for P in Psa]
-    Psri=array([Psri1,Psri2,Psri3,Psri4])
-    qsri=array([P.pos[0] for P in Psri])
-    if len(qsri[qsri==123])==4:qine=1
-    if len(qsri[qsri==-123])==4:qoute=1
-    if (qini+qouti)==0:
-        Fsri=[Ringe,Ringe,Ringe,Ringe]
-        Qsri=array(\
-            [pointInFigure(F,P)\
-                 for F,P in zip(Fsri,Psri)])
-        Psri=sortPolygonVertices(Psri[Qsri>-FIGTOL])
-        Asri=convexPolygon(Psri)
-    else:
-        Asri=qini*FIGUREAREA(Ringi)
-
-    #////////////////////////////////////////
-    #COMMON POINTS
-    #////////////////////////////////////////
-    #EXTERNAL RING
-    Ps=array([Ppre1,Psre1,Ppre2,Psp2,Ppre3,
-              Psre2,Ppre4,Psp1,Psre3,Psre4])
-    Fs=[Star,Planet,Star,Ringe,Star,
-        Planet,Star,Ringe,Planet,Planet]
-    Qs=array([pointInFigure(F,P) for F,P in zip(Fs,Ps)])
-    Pine=sortPolygonVertices(Ps[Qs>0])
-    line=len(Pine)
-
-    #INTERNAL RING
-    Ps=array([Ppri1,Psri1,Ppri2,Psp2,Ppri3,
-              Psri2,Ppri4,Psp1,Psri3,Psri4])
-    Fs=[Star,Planet,Star,Ringi,Star,
-        Planet,Star,Ringi,Planet,Planet]
-    Qs=array([pointInFigure(F,P) for F,P in zip(Fs,Ps)])
-    Pini=sortPolygonVertices(Ps[Qs>0])
-
-    #////////////////////////////////////////
-    #COMMON AREAS
-    #////////////////////////////////////////
-    if len(Pine)==0 or len(Pini)==0:
-        Pcusp=toPoint(AR(Planet.C[0],Planet.C[1]+Planet.b))
-        qcusp=pointInFigure(Star,Pcusp)
-    if len(Pine)==0:
-        if qcusp<0:Asrec=0.0
-        else:Asrec=Asp
-    else:Asrec=convexPolygon(Pine)
-    if len(Pini)==0:
-        if qcusp<0:Asric=0.0
-        else:Asric=Asp
-    else:Asric=convexPolygon(Pini)
+        Asp=qine*Planet.area()
 
     #////////////////////////////////////////
     #TRANSIT AREA
     #////////////////////////////////////////
-    try:
-        #WITH FINITE OPACITY
-        Atrans=Asp+S.block*((Asre-Asrec)-(Asri-Asric))
-    except:
-        #ASSUMING INFINITE OPACITY
-        Atrans=Asp+Asre-Asri-Asrec+Asric
-
-    return Atrans,Asp,Asre,Asri,Asrec,Asric,Psa,Feqs
+    return Asp,Psa,Feqs
 
 def transitOblateAreaTime(t,S):
     #UPDATE POSITION
@@ -1527,6 +1428,21 @@ def transitAreaMontecarlo(Planet,Ringe,Ringi,NP=1E3):
         mA=float(fmA%mA)
         dA=float(fmE%dA)
     return mA,dA,concatenate((xs1,xs2)),concatenate((ys1,ys2))
+
+def transitAreaOblateMontecarlo(Planet,NP=1E3):
+    """
+    Compute transit area via Montecarlo integration
+    """
+    Star=Figure(AR(0.0,0.0),1.0,1.0,1.0,0.0,'Star')
+    mA,dA,xs,ys=montecarloArea([Star,Planet],
+                               [+1,+1],Npoints=NP)
+    if dA>0:
+        nd=abs(log10(dA))+1
+        fmA="%%.%df"%nd
+        fmE="%%.%df"%(nd+1)
+        mA=float(fmA%mA)
+        dA=float(fmE%dA)
+    return mA,dA,xs,ys
 
 #//////////////////////////////
 #PLOT
