@@ -6,9 +6,11 @@ from matplotlib import patches as pat
 from cmath import sqrt as csqrt,phase
 from scipy import constants as const
 from scipy.optimize import newton,brentq,fsolve
+from scipy.integrate import quad as integrate
 from sys import argv,exit
 from os import system
 from numpy import *
+from lmfit import minimize,Parameters,Parameter,report_fit
 
 ###################################################
 #MACROS
@@ -20,15 +22,16 @@ from numpy import *
 RAD=180/pi
 DEG=pi/180
 RAND=random.rand
+TAB="\t"
 BARL="*"*50+"\n"
 RBAR="\n"+"*"*50
+
 MAG=lambda P:sqrt(sum(P**2))
 AR=lambda x,y:array([x,y])
 AR3=lambda x,y,z:array([x,y,z])
 ARCTAN=lambda num,den:mod(arctan2(num,den),2*pi)
 EQUAL=lambda x,y:abs(x-y)<=ZERO
 DENSITY=lambda M,R:M/(4*pi/3*R**3)
-TAB="\t"
 def VERB(routine):print BARL,routine,RBAR
 
 #//////////////////////////////
@@ -49,17 +52,22 @@ ANGLETOL=3*DEG
 #TOLERANCE FOR CALCULATING DISTANCE
 DISTANCETOL=1E-15
 
+#TOLERANCE FOR REJECTING RINGS FROM AREA CALCULATION
+NORINGTOL=1E-5
+
+#OTHER
 IMAGTOL=1E-5
 FIGTOL=8E-3
-NORINGTOL=1E-2
 
 #//////////////////////////////
 #ALIASES
 #//////////////////////////////
+INSIDE=+1
+OUTSIDE=-1
+
 INGRESS=-1
 EGRESS=+1
-OUTSIDE=+1
-INSIDE=-1
+
 CLOSEST=-1
 FARTHEST=+1
 
@@ -87,21 +95,27 @@ DAY=const.day
 YEAR=const.year
 HOUR=const.hour
 MINUTE=const.minute
+LIGHTY=const.light_year
+PARSEC=3.2616*LIGHTY
+
+NANO=1E-9
+KILO=1E3
+MEGA=1E6
+GIGA=1E9
 
 #////////////////////
 #PLANETARY
 #////////////////////
 RJUP=69911.0*KM
 MJUP=1.898E27 #kg
-
 RSAT=58232.0*KM
 MSAT=5.6846E26 #kg
-
 RSAT_BRING=92000.0*KM
 RSAT_ARING=136775.0*KM
-
 RSUN=696342.0*KM
 MSUN=1.98855E30 #kg
+LSUN=3.846E26 #W
+TSUN=5778.0 #K
 RHOSUN=MSUN/(4*pi/3*RSUN**3)
 
 #////////////////////
@@ -109,6 +123,9 @@ RHOSUN=MSUN/(4*pi/3*RSUN**3)
 #////////////////////
 AU=149597871.0*KM
 GCONST=const.G
+HP=const.h
+KB=const.k
+CSPEED=const.c
 
 ###################################################
 #DATA TYPES
@@ -128,23 +145,28 @@ class Point(object):
         return s
 
 class Figure(object):
-    def __init__(self,C,a,b,t,name):
+    def __init__(self,C,a,b,ct,st,name):
         self.C=C
         self.a=a
         self.b=b
-        self.t=t
+        self.cost=ct
+        self.sint=st
         self.name=name
     def __str__(self):
         s="("
         s+="C="+str(self.C)+","
         s+="a="+str(self.a)+","
         s+="b="+str(self.b)+","
-        s+="t="+str(self.t)+","
+        s+="cos(t)="+str(self.cost)+","
+        s+="sin(t)="+str(self.sint)+","
         s+="name="+str(self.name)
         s+=")"
         return s
-FNULL=Figure(AR(0,0),0,0,0,'')
-FONES=Figure(AR(0,0),1.0,1.0,0,'')
+    def area(self):
+        return pi*self.a*self.b
+
+FNULL=Figure(AR(0,0),0,0,1,0,'')
+FONES=Figure(AR(0,0),1.0,1.0,1.0,0.0,'')
 
 class Orbit(object):
     def __init__(self,a,e,P,Mos):
@@ -161,6 +183,34 @@ class Orbit(object):
         s+="P = "+str(self.P)
         s+=")"
         return s
+
+class dict2obj(object):
+    """
+    Class that allows the conversion from dictionary to class-like
+    objects
+    """
+    def __init__(self,dic={}):self.__dict__.update(dic)
+    def __add__(self,other):
+        self.__dict__.update(other.__dict__)
+        return self
+
+def copyObject(obj):
+    """
+    Create a copy of an object
+    """
+    new=dict()
+    dic=obj.__dict__
+    for key in dic.keys():
+        var=dic[key]
+        new[key]=var
+        try:
+            var.__dict__
+            inew=copyObject(var)
+            new[key]=inew
+        except:
+            pass
+    nobj=dict2obj(new)
+    return nobj
 
 ###################################################
 #CONFIGURATION
@@ -222,11 +272,11 @@ def rotMat(axis,theta):
              [2*(bd+ac),2*(cd-ab),aa+dd-bb-cc]])
     return M
 
-def rotTrans(r,t,b):
+def rotTrans(r,cost,sint,b):
     """
     Rotate and translate vector r by angle t and displ. b
     """
-    M=array([[cos(t),-sin(t)],[sin(t),cos(t)]])
+    M=array([[cost,-sint],[sint,cost]])
     rp=dot(M,r)+b
     return rp
 
@@ -420,17 +470,16 @@ def pointInFigure(F,P):
         r=MAG(d)
         rf=F.a
         return (rf-r)/r
-
-    t=F.t
+    ct=F.cost
+    st=F.sint
     d=P.pos-F.C
-    d=rotTrans(d,-t,AR(0,0))
+    d=rotTrans(d,ct,-st,AR(0,0))
     r=MAG(d)
     if EQUAL(r,ZERO):return +F.a
     cost=d[0]/r
     sint=d[1]/r
     rf=ellipseRadius(F,cost,sint)
     return (rf-r)/r
-
 
 #//////////////////////////////
 #INTERSECTION
@@ -451,7 +500,7 @@ def qCircleCircle(F1,F2):
 
 def cIc(F1,F2):
     """
-    Computes the 2 points of intersection of 2 circles
+    Computes the 2 points of intersection of 2 (nonconcentric) circles
     It is assumed that F1<F2
     """
     q=qCircleCircle(F1,F2) or 0
@@ -477,7 +526,7 @@ def cIc(F1,F2):
         Point(C+AR(r*cos(t1),r*sin(t1)),F1,F2),\
         Point(C+AR(r*cos(t2),r*sin(t2)),F1,F2)
 
-def eIc(F1,F2):
+def eIcAnalytical(F1,F2):
     """
     Computes the 4 intersection points between an ellipse
     (F1) and an unitary circle (F2).
@@ -613,11 +662,12 @@ def cIe(F1,F2):
     a2=a**2;b2=b**2;R2=R**2
     x=a*sqrt((R2-b2)/(a2-b2))
     y=b*sqrt((a2-R2)/(a2-b2))
+    
     return\
-        Point(AR(x,y)+C,F1,F2),\
-        Point(AR(-x,y)+C,F1,F2),\
+        Point(AR(+x,+y)+C,F1,F2),\
+        Point(AR(-x,+y)+C,F1,F2),\
         Point(AR(-x,-y)+C,F1,F2),\
-        Point(AR(x,-y)+C,F1,F2)
+        Point(AR(+x,-y)+C,F1,F2)
     
 #//////////////////////////////
 #AREAS
@@ -740,7 +790,7 @@ def montecarloArea(Fs,oper,Npoints=1E3):
     ys=array([])
     for F in Fs[1:]:
         C=F.C
-        cost=cos(F.t);sint=sin(F.t)
+        cost=F.cost;sint=F.sint
         x=C[0];y=C[1]
         a=F.a
         b=F.b
@@ -983,41 +1033,125 @@ def leafArea(Ps):
     return Al
 
 #//////////////////////////////
-#TRANSIT AREA
+#RINGED PLANET AREA
 #//////////////////////////////
-def transitArea(Planet,Ringe,Ringi):
+def ringedPlanetArea(S):
     """
-    Compute transit area of planet with his rings (Ringe, Ringi) over
-    a star with unitary radius.
-    ** OPTIMIZE A LOT
+    Area of a planet with its rings
     """
+    Planet=S.Planet
+    Ringe=S.Ringext
+    Ringi=S.Ringint
 
-    #BASIC PROPERTIES
     C=Planet.C
-    if VERBOSE[1]:print "*"*60
-    if VERBOSE[1]:print "Original Center: ",C
-    if VERBOSE[1]:print "*"*60
-
-    t=Ringe.t
+    ct=Ringe.cost
+    st=Ringe.sint
     Rp=Planet.a
     Rea=Ringe.a
     Reb=Ringe.b
     Ria=Ringi.a
     Rib=Ringi.b
 
+    #ONLY PLANET
+    if Rea==0 or Reb/Rea<NORINGTOL:return pi*Rp**2
+    
     #PUTTING RINGS HORIZONTAL
-    Ca=rotTrans(C,-t,AR(0,0))
-    if VERBOSE[1]:print "Center for rings horizontal: ",Ca
+    Ca=rotTrans(C,ct,-st,AR(0,0))
 
     #NORMALIZING POSITION
     Cg=abs(Ca)
-    if VERBOSE[1]:print "Equivalent center of figures:",Cg
 
+    #FIGURES
+    Star=Figure(AR(0.0,0.0),1.0,1.0,1.0,0.0,'Star')
+    Planet=Figure(Cg,Rp,Rp,1.0,0.0,'Planet')
+    Ringe=Figure(Cg,Rea,Reb,1.0,0.0,'Ringe')
+    Ringi=Figure(Cg,Ria,Rib,1.0,0.0,'Ringi')
+
+    #AREAS
+    Asp=pi*Rp**2
+    Asre=pi*Rea*Reb
+    Asri=pi*Ria*Rib
+
+    #INTERSECTION POINTS
+    Ppre1,Ppre2,Ppre3,Ppre4=cIe(Ringe,Planet)
+    Ppri1,Ppri2,Ppri3,Ppri4=cIe(Ringi,Planet)
+
+    #EXTERNAL RING
+    Ps=array([Ppre1,Ppre2,Ppre3,Ppre4])
+    Fs=[Planet,Planet,Planet,Planet]
+    Qs=array([pointInFigure(F,P) for F,P in zip(Fs,Ps)])
+    Pine=sortPolygonVertices(Ps[Qs>-FIGTOL])
+
+    #INTERNAL RING
+    Ps=array([Ppri1,Ppri2,Ppri3,Ppri4]) 
+    Fs=[Planet,Planet,Planet,Planet]
+    Qs=array([pointInFigure(F,P) for F,P in zip(Fs,Ps)])
+    Pini=sortPolygonVertices(Ps[Qs>-FIGTOL])
+
+    #AREAS
+    Pcusp=toPoint(AR(Planet.C[0],Planet.C[1]+Planet.b))
+    if len(Pine)==0:
+        qcusp=pointInFigure(Ringe,Pcusp)
+        if qcusp<-FIGTOL:Asrec=0.0
+        else:Asrec=Asp
+    else:Asrec=convexPolygon(Pine)
+    if len(Pini)==0:
+        qcusp=pointInFigure(Ringi,Pcusp)
+        if qcusp<-FIGTOL:Asric=0.0
+        else:Asric=Asp
+    else:Asric=convexPolygon(Pini)
+
+    #RINGED PLANET AREA
+    try:
+        #WITH FINITE OPACITY
+        Aringed=Asp+S.block*((Asre-Asrec)-(Asri-Asric))
+    except:
+        #ASSUMING INFINITE OPACITY
+        Aringed=Asp+Asre-Asri-Asrec+Asric
+
+    return Aringed
+
+#//////////////////////////////
+#TRANSIT AREA
+#//////////////////////////////
+def transitArea(S):
+    """
+    Compute transit area of planet with his rings (Ringe, Ringi) over
+    a star with unitary radius.
+    ** OPTIMIZE A LOT
+    """
+    #////////////////////////////////////////
+    #INTERSECTION METHOD
+    #////////////////////////////////////////
+    #eIc=eIcAnalytical
+    Planet=S.Planet
+    Ringe=S.Ringext
+    Ringi=S.Ringint
+
+    #////////////////////////////////////////
+    #BASIC PROPERTIES
+    #////////////////////////////////////////
+    C=Planet.C
+    ct=Ringe.cost
+    st=Ringe.sint
+    Rp=Planet.a
+    Rea=Ringe.a
+    Reb=Ringe.b
+    Ria=Ringi.a
+    Rib=Ringi.b
+
+    #////////////////////////////////////////
+    #FIGURES ORIENTATION FIX
+    #////////////////////////////////////////
+    #RINGS HORIZONTAL
+    Ca=rotTrans(C,ct,-st,AR(0,0))
+    #NORMALIZING POSITION
+    Cg=abs(Ca)
     #FIGURES IN NORMAL POSITION
-    Star=Figure(AR(0.0,0.0),1.0,1.0,0.0,'Star')
-    Planet=Figure(Cg,Rp,Rp,0.0,'Planet')
-    Ringe=Figure(Cg,Rea,Reb,0.0,'Ringe')
-    Ringi=Figure(Cg,Ria,Rib,0.0,'Ringi')
+    Star=Figure(AR(0.0,0.0),1.0,1.0,1.0,0.0,'Star')
+    Planet=Figure(Cg,Rp,Rp,1.0,0.0,'Planet')
+    Ringe=Figure(Cg,Rea,Reb,1.0,0.0,'Ringe')
+    Ringi=Figure(Cg,Ria,Rib,1.0,0.0,'Ringi')
     Feqs=[Planet,Ringe,Ringi]
 
     #INTERSECTION POINTS
@@ -1030,59 +1164,12 @@ def transitArea(Planet,Ringe,Ringi):
     Psp1.name='Psp1';Psp2.name='Psp2';
     Psa+=[Psp1,Psp2]
     Asp=leafArea((Psp1,Psp2))
-    if VERBOSE[0]:print "Area planet inside star: ",Asp
 
+    #////////////////////////////////////////
     #IF NO RINGS (i=90) USE ONLY PLANET
-    if Ringe.a==0 or Ringe.b/Ringe.a<NORINGTOL:
-        if VERBOSE[0]:print "Using only planet."
-        return Asp,Psa,Feqs
-
     #////////////////////////////////////////
-    #STAR AND EXTERNAL RINGS
-    #////////////////////////////////////////
-    qine=0;qoute=0
-    Psre1,Psre2,Psre3,Psre4=eIc(Ringe,Star)
-    Psre1.name='Psre1';Psre2.name='Psre2';
-    Psre3.name='Psre3';Psre4.name='Psre4';
-    Psa+=[Psre1,Psre2,Psre3,Psre4]
-    Psn=[str(P) for P in Psa]
-    if VERBOSE[0]:print "Points Star-External Ring: ",Psre1.pos,Psre2.pos,Psre3.pos,Psre4.pos
-    #CHOOSE VALID POINTS
-    Psre=array([Psre1,Psre2,Psre3,Psre4])
-    qsre=array([P.pos[0] for P in Psre])
-    if len(qsre[qsre==123])==4:qine=1
-    if len(qsre[qsre==-123])==4:qoute=1
-    if VERBOSE[0]:print "qine, qoute: ",qine,qoute
-    if (qine+qoute)==0:
-        if VERBOSE[0]:print "Sorting Star-External Ring points"
-        Fsre=[Ringe,Ringe,Ringe,Ringe]
-        Qsre=array([pointInFigure(F,P) for F,P in zip(Fsre,Psre)])
-        if VERBOSE[0]:print "Scoring:",Qsre
-        Psre=sortPolygonVertices(Psre[Qsre>-FIGTOL])
-    
-    #////////////////////////////////////////
-    #STAR AND INTERNAL RINGS
-    #////////////////////////////////////////
-    qini=0;qouti=0
-    Psri1,Psri2,Psri3,Psri4=eIc(Ringi,Star)
-    Psri1.name='Psri1';Psri2.name='Psri2';
-    Psri3.name='Psri3';Psri4.name='Psri4';
-    Psa+=[Psri1,Psri2,Psri3,Psri4]
-    Psn=[str(P) for P in Psa]
-    if VERBOSE[0]:print "Points Star-Internal Ring: ",Psri1.pos,Psri2.pos,Psri3.pos,Psri4.pos
-    #CHOOSE VALID POINTS
-    Psri=array([Psri1,Psri2,Psri3,Psri4])
-    qsri=array([P.pos[0] for P in Psri])
-    if len(qsri[qsri==123])==4:qini=1
-    if len(qsri[qsri==-123])==4:qouti=1
-    if VERBOSE[0]:print "qini, qouti: ",qini,qouti
-    if (qini+qouti)==0:
-        if VERBOSE[0]:print "Sorting Star-Internal Ring points"
-        Fsri=[Ringi,Ringi,Ringi,Ringi]
-        Qsri=array([pointInFigure(F,P) for F,P in zip(Fsri,Psri)])
-        if VERBOSE[0]:print "Scoring:",Qsri
-        Psri=sortPolygonVertices(Psri[Qsri>-FIGTOL])
-    #exit(0)
+    if Ringe.a==0 or Reb/Rea<NORINGTOL:
+        return Asp,Asp,0,0,0,0,Psa,Feqs
 
     #////////////////////////////////////////
     #PLANET AND RINGS
@@ -1097,38 +1184,70 @@ def transitArea(Planet,Ringe,Ringi):
     Psa+=[Ppri1,Ppri2,Ppri3,Ppri4]
 
     #////////////////////////////////////////
-    #RING AREAS
+    #STAR AND EXTERNAL RINGS
     #////////////////////////////////////////
-    if qine+qoute==0:
+    qine=0;qoute=0
+    Psre1,Psre2,Psre3,Psre4=eIc(Ringe,Star)
+    Psre1.name='Psre1';Psre2.name='Psre2';
+    Psre3.name='Psre3';Psre4.name='Psre4';
+    Psa+=[Psre1,Psre2,Psre3,Psre4]
+    Psn=[str(P) for P in Psa]
+    Psre=array([Psre1,Psre2,Psre3,Psre4])
+    qsre=array([P.pos[0] for P in Psre])
+    if len(qsre[qsre==123])==4:qine=1
+    if len(qsre[qsre==-123])==4:qoute=1
+    if (qine+qoute)==0:
+        Fsre=[Ringe,Ringe,Ringe,Ringe]
+        Qsre=array(\
+            [pointInFigure(F,P)\
+                 for F,P in zip(Fsre,Psre)])
+        Psre=sortPolygonVertices(Psre[Qsre>-FIGTOL])
         Asre=convexPolygon(Psre)
     else:
         Asre=qine*FIGUREAREA(Ringe)
-    if VERBOSE[0]:print "Area external ring inside star: ",Asre
-    if qini+qouti==0:
+    
+    #////////////////////////////////////////
+    #STAR AND INTERNAL RINGS
+    #////////////////////////////////////////
+    qini=0;qouti=0
+    Psri1,Psri2,Psri3,Psri4=eIc(Ringi,Star)
+    Psri1.name='Psri1';Psri2.name='Psri2';
+    Psri3.name='Psri3';Psri4.name='Psri4';
+    Psa+=[Psri1,Psri2,Psri3,Psri4]
+    Psn=[str(P) for P in Psa]
+    Psri=array([Psri1,Psri2,Psri3,Psri4])
+    qsri=array([P.pos[0] for P in Psri])
+    if len(qsri[qsri==123])==4:qine=1
+    if len(qsri[qsri==-123])==4:qoute=1
+    if (qini+qouti)==0:
+        Fsri=[Ringe,Ringe,Ringe,Ringe]
+        Qsri=array(\
+            [pointInFigure(F,P)\
+                 for F,P in zip(Fsri,Psri)])
+        Psri=sortPolygonVertices(Psri[Qsri>-FIGTOL])
         Asri=convexPolygon(Psri)
     else:
         Asri=qini*FIGUREAREA(Ringi)
-    if VERBOSE[0]:print "Area internal ring inside star: ",Asri
-    #exit(0)
 
     #////////////////////////////////////////
     #COMMON POINTS
     #////////////////////////////////////////
     #EXTERNAL RING
-    Ps=array([Ppre1,Psre1,Ppre2,Psp2,Ppre3,Psre2,Ppre4,Psp1,Psre3,Psre4])
-    Fs=[Star,Planet,Star,Ringe,Star,Planet,Star,Ringe,Planet,Planet]
+    Ps=array([Ppre1,Psre1,Ppre2,Psp2,Ppre3,
+              Psre2,Ppre4,Psp1,Psre3,Psre4])
+    Fs=[Star,Planet,Star,Ringe,Star,
+        Planet,Star,Ringe,Planet,Planet]
     Qs=array([pointInFigure(F,P) for F,P in zip(Fs,Ps)])
     Pine=sortPolygonVertices(Ps[Qs>0])
     line=len(Pine)
-    if VERBOSE[0]:print "External Ring Exclusion Points (%d): "%line,pointNames(Pine)
-    #exit(0)
 
     #INTERNAL RING
-    Ps=array([Ppri1,Psri1,Ppri2,Psp2,Ppri3,Psri2,Ppri4,Psp1,Psri3,Psri4])
-    Fs=[Star,Planet,Star,Ringi,Star,Planet,Star,Ringi,Planet,Planet]
+    Ps=array([Ppri1,Psri1,Ppri2,Psp2,Ppri3,
+              Psri2,Ppri4,Psp1,Psri3,Psri4])
+    Fs=[Star,Planet,Star,Ringi,Star,
+        Planet,Star,Ringi,Planet,Planet]
     Qs=array([pointInFigure(F,P) for F,P in zip(Fs,Ps)])
     Pini=sortPolygonVertices(Ps[Qs>0])
-    if VERBOSE[0]:print "Internal Ring Exclusion Points: ",pointNames(Pini)
 
     #////////////////////////////////////////
     #COMMON AREAS
@@ -1136,8 +1255,6 @@ def transitArea(Planet,Ringe,Ringi):
     if len(Pine)==0 or len(Pini)==0:
         Pcusp=toPoint(AR(Planet.C[0],Planet.C[1]+Planet.b))
         qcusp=pointInFigure(Star,Pcusp)
-        if VERBOSE[0]:print "Pcusp = ",Pcusp.pos
-        if VERBOSE[0]:print "Condition = ",qcusp
     if len(Pine)==0:
         if qcusp<0:Asrec=0.0
         else:Asrec=Asp
@@ -1146,313 +1263,97 @@ def transitArea(Planet,Ringe,Ringi):
         if qcusp<0:Asric=0.0
         else:Asric=Asp
     else:Asric=convexPolygon(Pini)
-    if VERBOSE[0]:print "External ring common area: ",Asrec
-    if VERBOSE[0]:print "Internal ring common area: ",Asric
 
     #////////////////////////////////////////
     #TRANSIT AREA
     #////////////////////////////////////////
-    Atrans=Asp+Asre-Asri-Asrec+Asric
+    try:
+        #WITH FINITE OPACITY
+        Atrans=Asp+S.block*((Asre-Asrec)-(Asri-Asric))
+    except:
+        #ASSUMING INFINITE OPACITY
+        Atrans=Asp+Asre-Asri-Asrec+Asric
 
-    return Atrans,Psa,Feqs
+    return Atrans,Asp,Asre,Asri,Asrec,Asric,Psa,Feqs
 
-def transitAreaTime(t,orbit,Planet,Ringe,Ringi):
-    #COMPUTE PLANET CENTER POSITION
-    M=orbit.n*t
-    E=eccentricAnomalyFast(orbit.e,M)
-    rp=[orbit.a*cos(E)-orbit.a*orbit.e,orbit.b*sin(E),0.0]
-    rs=dot(orbit.Mos,rp)
-    Planet.C[0]=Ringe.C[0]=Ringi.C[0]=rs[0]
-    
-    #COMPUTE AREA
-    At,Ps,Fs=transitArea(Planet,Ringe,Ringi)
+def transitAreaTime(t,S):
+    #UPDATE POSITION
+    updatePosition(S,t)
+    #AREAS
+    Es=transitArea(S)
+    At=Es[0]
     return At
 
-def transitAreaTimeFast(t,tcs,Ar,orbit,Planet,Ringe,Ringi):
-    #DETERMINE TRANSIT DURATION
-    dtrans=tcs[-1]-tcs[0]
-    dtplanet=dtrans*Planet.a
-
+def transitAreaTimeFast(t,tcs,Ar,S):
     #ONLY COMPUTE AREA IF AT INGRESS OR EGRESS PHASE
-    if t<=tcs[0]:At=0
-    elif t<=tcs[1]:At=transitAreaTime(t,orbit,Planet,Ringe,Ringi)
-    elif t<=tcs[2]:At=Ar
-    elif t<=tcs[3]:At=transitAreaTime(t,orbit,Planet,Ringe,Ringi)
+    if t<=tcs[1]:At=0
+    elif t<=tcs[2]:At=transitAreaTime(t,S)
+    elif t<=tcs[3]:At=Ar
+    elif t<=tcs[4]:At=transitAreaTime(t,S)
     else:At=0
-
     return At
 
-def ringedPlanetBox(Planet,Ringe):
+#//////////////////////////////
+#TRANSIT OBLATE AREA
+#//////////////////////////////
+def transitAreaOblate(S):
     """
-    Determine the vertical limits of a box cointaining Planets and
-    their rings.
+    Compute transit area of an oblate planet
     """
+    #////////////////////////////////////////
+    #INTERSECTION METHOD
+    #////////////////////////////////////////
+    #eIc=eIcAnalytical
+    Planet=S.Planet
+    Ringe=S.Ringext
+    Ringi=S.Ringint
+
+    #////////////////////////////////////////
+    #BASIC PROPERTIES
+    #////////////////////////////////////////
     C=Planet.C
-    B=C[1]
-    Rp=Planet.a
-    a=Ringe.a
-    b=Ringe.b
-    t=Ringe.t
-
-    #CALCULATE 10 POINTS OF THE ELLIPSE
-    qs=linspace(0,2*pi,10)
-    E=Figure(AR(0.0,0.0),a,b,0,'Dummy')
-    Ps=[rotTrans(ellipsePoint(E,cos(q),sin(q)),t,C) for q in qs]
-    ys=[P[1] for P in Ps]
-
-    #CALCULATE MAXIMUM AND MINIMUM
-    yemin=min(ys)
-    yemax=max(ys)
-    ymin=min(yemin,B-Rp)
-    ymax=max(yemax,B+Rp)
-
-    return ymin,ymax
-
-def contactPosition(Planet,Ringe,Ringi,Ar,B,Phase=EGRESS,Side=OUTSIDE,tola=1E-3,tolx=0.0,maxfun=10):
-    """
-    Calculate the contact position of a planet and their rings
-
-    Ar: Area ringed planet
-    B: Impact parameter (|B|<~1+Rp+Re)
-    Side: Side of the transit, +1:OUTSIDE, -1:INSIDE
-    Phase: Phase of the transit, +1:EGRESS, -1:INGRESS
-    tola: Tolerance in fraction of ringed planet area (Ar)
-    tolx: Tolerance in fraction of star radius
-    maxfun: maximum number of callings to Area
-
-    Contacts are:
-    T1: INGRESS,OUTSIDE
-    T2: INGRESS,INSIDE
-    T3: EGRESS,INSIDE
-    T4: EGRESS,OUTSIDE
-
-    **OPTIMIZE
-    """
-    #COUNTERS
-    ifun=0
-    
-    #INPUT PARAMETERS
-    Rp=Planet.a
-    a=Ringe.a
-    b=Ringe.b
-    t=Ringe.t
-
-    #IMPACT PARAMETER
-    Planet.C[1]=B
-    
-    #CHECK EXTREMES IF BOXED ANALYSIS IS REQUIRED
-    if abs(B)>(1-Rp-a):
-        ymin,ymax=ringedPlanetBox(Planet,Ringe)
-        ys=[abs(ymin),abs(ymax)]
-        ylow=min(ys);yup=max(ys)
-        if abs(ylow)>1:return -1,-1,-1,-1
-        if abs(yup)>1:
-            if Side==INSIDE:return 0,0,0,0
-
-    #COMPARISON AREA
-    if Side>0:Ac=0
-    else:Ac=Ar
-
-    #CENTER OF INGRESS/EGRESS
-    if abs(B)<1:x1=Phase*sqrt(1-B**2)
-    else:x1=0
-    Planet.C[0]=x1
-    A1,Ps,Fs=transitArea(Planet,Ringe,Ringi);A1-=Ac
-    ifun+=1
-    if VERBOSE[3]:print "x1,A1=",x1,A1
-
-    #ADVANCE
-    x2=x1+Side*Rp/2
-    Planet.C[0]=x2
-    A2,Ps,Fs=transitArea(Planet,Ringe,Ringi);A2-=Ac
-    ifun+=1
-    if VERBOSE[3]:print "x2,A2=",x2,A2
-    if VERBOSE[3]:print "Direction of Transit: A2 - A1 = ",A2-A1
-
-    #MAIN LOOP
-    while True:
-        if VERBOSE[3]:print "x1,x2 = ",x1,x2
-        x=x1-(x2-x1)/(A2-A1)*A1
-        Planet.C[0]=x
-        A,Ps,Fs=transitArea(Planet,Ringe,Ringi);A-=Ac
-        ifun+=1
-        if VERBOSE[3]:print "x,A = ",x,A
-        
-        if A==0:
-            if VERBOSE[3]:print "Zero area."
-            while A2*A==0:
-                if VERBOSE[3]:print "Searching, x2,A2,x,A = ",x2,A2,x,A
-                x=(x2+x)/2
-                Planet.C[0]=x
-                A,Ps,Fs=transitArea(Planet,Ringe,Ringi);A-=Ac
-                if VERBOSE[3]:print "x,A = ",x,A
-                ifun+=1
-                #if VERBOSE[3]:raw_input()
-            if VERBOSE[3]:print "After search, x2,A2,x,A = ",x2,A2,x,A
-
-        x1=x2
-        A1=A2
-        x2=x
-        A2=A
-        dx=abs(x2-x1)/2
-        if abs(A)<tola*abs(Ar) or dx<tolx or ifun>maxfun:break
-        #if VERBOSE[3]:raw_input()
-
-    if VERBOSE[3]:print "x,A=",x,A
-    return x,abs(A),dx,ifun
-
-def contactTime(thalf,dthalf,orbit,Planet,Ringe,Ringi,Ar,B,Phase=EGRESS,Side=OUTSIDE,tola=1E-3,tolx=0.0,maxfun=10):
-    """
-    Calculate the contact position of a planet and their rings
-    thalf: Estimated time of half transit
-    dthalf: Initial time-step
-    orbit: Orbit of the planet
-
-    Ar: Area ringed planet
-    B: Impact parameter (|B|<~1+Rp+Re)
-    Side: Side of the transit, +1:OUTSIDE, -1:INSIDE
-    Phase: Phase of the transit, +1:EGRESS, -1:INGRESS
-    tola: Tolerance in fraction of ringed planet area (Ar)
-    tolx: Tolerance in fraction of star radius
-    maxfun: maximum number of callings to Area
-
-    Contacts are:
-    T1: INGRESS,OUTSIDE
-    T2: INGRESS,INSIDE
-    T3: EGRESS,INSIDE
-    T4: EGRESS,OUTSIDE
-
-    **OPTIMIZE
-    """
-    #COUNTERS
-    ifun=0
-    
-    #INPUT PARAMETERS
-    Rp=Planet.a
-    a=Ringe.a
-    b=Ringe.b
-    t=Ringe.t
-
-    #IMPACT PARAMETER
-    Planet.C[1]=B
-    
-    #CHECK EXTREMES IF BOXED ANALYSIS IS REQUIRED
-    if abs(B)>(1-Rp-a):
-        ymin,ymax=ringedPlanetBox(Planet,Ringe)
-        ys=[abs(ymin),abs(ymax)]
-        ylow=min(ys);yup=max(ys)
-        if abs(ylow)>1:return -1,-1,-1,-1
-        if abs(yup)>1:
-            if Side==INSIDE:return 0,0,0,0
-
-    #COMPARISON AREA
-    if Side>0:Ac=0
-    else:Ac=Ar
-
-    #CENTER OF INGRESS/EGRESS
-    x1=thalf
-    A1=transitAreaTime(x1,orbit,Planet,Ringe,Ringi)-Ac
-    ifun+=1
-    if VERBOSE[1]:print "x1,A1=",x1,A1
-
-    #ADVANCE
-    x2=x1+dthalf
-    A2=transitAreaTime(x2,orbit,Planet,Ringe,Ringi)-Ac
-    ifun+=1
-    if VERBOSE[1]:print "x2,A2=",x2,A2
-    if VERBOSE[1]:print "Direction of Transit: A2 - A1 = ",A2-A1
-
-    #MAIN LOOP
-    while True:
-        if VERBOSE[1]:print "x1,x2 = ",x1,x2
-        if VERBOSE[1]:print "A1,A2 = ",A1,A2
-        if VERBOSE[1]:print "A1/(A1-A2) = ",A1/(A1-A2)
-        if VERBOSE[1]:print "dx = ",(x2-x1)*A1/(A1-A2)
-        x=x1-(x2-x1)/(A2-A1)*A1
-        A=transitAreaTime(x,orbit,Planet,Ringe,Ringi)-Ac
-        ifun+=1
-        if VERBOSE[1]:print "x,A = ",x,A
-        
-        if A==0:
-            if VERBOSE[1]:print "Zero area."
-            while A2*A==0:
-                if VERBOSE[1]:print "Searching, x2,A2,x,A = ",x2,A2,x,A
-                x=(x2+x)/2
-                A=transitAreaTime(x,orbit,Planet,Ringe,Ringi)-Ac
-                if VERBOSE[1]:print "x,A = ",x,A
-                ifun+=1
-                #if VERBOSE[1]:raw_input()
-            if VERBOSE[1]:print "After search, x2,A2,x,A = ",x2,A2,x,A
-
-        x1=x2
-        A1=A2
-        x2=x
-        A2=A
-        dx=abs(x2-x1)/2
-        if abs(A)<tola*abs(Ar) or dx<tolx or ifun>maxfun:break
-        #if VERBOSE[1]:raw_input()
-
-    if VERBOSE[1]:print "x,A=",x,A
-    return x,abs(A),dx,ifun
-
-def contactTimes(tcen,dtrans,orbit,Planet,Ringe,Ringi):
-    Ar,Ps=ringedPlanetArea(Planet,Ringe,Ringi)
-    dtp=Planet.a*dtrans/2
-    Borb=Planet.C[1]
-
-    t1,A,dt,nfun=contactTime(tcen-dtrans/2,dtp,orbit,Planet,Ringe,Ringi,
-                             Ar,Borb,Side=OUTSIDE,Phase=INGRESS,tola=1E-6)
-    if VERBOSE[0]:print "Contact time 1 = %.5f h"%((t1-tcen)/HOUR)
-    t2,A,dt,nfun=contactTime(tcen-dtrans/2,dtp,orbit,Planet,Ringe,Ringi,
-                             Ar,Borb,Side=INSIDE,Phase=INGRESS,tola=1E-6)
-    if VERBOSE[0]:print "Contact time 2 = %.5f h"%((t2-tcen)/HOUR)
-    t3,A,dt,nfun=contactTime(tcen+dtrans/2,dtp,orbit,Planet,Ringe,Ringi,
-                             Ar,Borb,Side=INSIDE,Phase=EGRESS,tola=1E-6)
-    if VERBOSE[0]:print "Contact time 3 = %.5f h"%((t3-tcen)/HOUR)
-    t4,A,dt,nfun=contactTime(tcen+dtrans/2,dtp,orbit,Planet,Ringe,Ringi,
-                             Ar,Borb,Side=OUTSIDE,Phase=EGRESS,tola=1E-6)
-    if VERBOSE[0]:print "Contact time 3 = %.5f h"%((t4-tcen)/HOUR)
-    return t1,t2,t3,t4
-
-def ringedPlanetArea(Planet,Ringe,Ringi):
-    """
-    Area of a planet with its rings
-    """
-    C=Planet.C
-    t=Ringe.t
+    ct=Ringe.cost
+    st=Ringe.sint
     Rp=Planet.a
     Rea=Ringe.a
     Reb=Ringe.b
     Ria=Ringi.a
     Rib=Ringi.b
 
-    if Reb/Rea<NORINGTOL:
-        if VERBOSE[0]:print "Only planet."
-        return pi*Rp**2,[]
-    
-    #PUTTING RINGS HORIZONTAL
-    Ca=rotTrans(C,-t,AR(0,0))
-
+    #////////////////////////////////////////
+    #FIGURES ORIENTATION FIX
+    #////////////////////////////////////////
+    #RINGS HORIZONTAL
+    Ca=rotTrans(C,ct,-st,AR(0,0))
     #NORMALIZING POSITION
     Cg=abs(Ca)
-
-    #FIGURES
-    Star=Figure(AR(0.0,0.0),1.0,1.0,0.0,'Star')
-    Planet=Figure(Cg,Rp,Rp,0.0,'Planet')
-    Ringe=Figure(Cg,Rea,Reb,0.0,'Ringe')
-    Ringi=Figure(Cg,Ria,Rib,0.0,'Ringi')
+    #FIGURES IN NORMAL POSITION
+    Star=Figure(AR(0.0,0.0),1.0,1.0,1.0,0.0,'Star')
+    Planet=Figure(Cg,Rp,Rp,1.0,0.0,'Planet')
+    Ringe=Figure(Cg,Rea,Reb,1.0,0.0,'Ringe')
+    Ringi=Figure(Cg,Ria,Rib,1.0,0.0,'Ringi')
     Feqs=[Planet,Ringe,Ringi]
-
-    #AREAS
-    Asp=pi*Rp**2
-    Asre=pi*Rea*Reb
-    Asri=pi*Ria*Rib
-    if VERBOSE[0]:print "Area planet: ",Asp
-    if VERBOSE[0]:print "Area external ring: ",Asre
-    if VERBOSE[0]:print "Area internal ring: ",Asri
 
     #INTERSECTION POINTS
     Psa=[]
+
+    #////////////////////////////////////////
+    #STAR AND PLANET
+    #////////////////////////////////////////
+    Psp1,Psp2=cIc(Planet,Star)
+    Psp1.name='Psp1';Psp2.name='Psp2';
+    Psa+=[Psp1,Psp2]
+    Asp=leafArea((Psp1,Psp2))
+
+    #////////////////////////////////////////
+    #IF NO RINGS (i=90) USE ONLY PLANET
+    #////////////////////////////////////////
+    if Ringe.a==0 or Reb/Rea<NORINGTOL:
+        return Asp,Asp,0,0,0,0,Psa,Feqs
+
+    #////////////////////////////////////////
+    #PLANET AND RINGS
+    #////////////////////////////////////////
     Ppre1,Ppre2,Ppre3,Ppre4=cIe(Ringe,Planet)
     Ppre1.name='Ppre1';Ppre2.name='Ppre2';
     Ppre3.name='Ppre3';Ppre4.name='Ppre4';
@@ -1462,51 +1363,156 @@ def ringedPlanetArea(Planet,Ringe,Ringi):
     Ppri3.name='Ppri3';Ppri4.name='Ppri4';
     Psa+=[Ppri1,Ppri2,Ppri3,Ppri4]
 
+    #////////////////////////////////////////
+    #STAR AND EXTERNAL RINGS
+    #////////////////////////////////////////
+    qine=0;qoute=0
+    Psre1,Psre2,Psre3,Psre4=eIc(Ringe,Star)
+    Psre1.name='Psre1';Psre2.name='Psre2';
+    Psre3.name='Psre3';Psre4.name='Psre4';
+    Psa+=[Psre1,Psre2,Psre3,Psre4]
+    Psn=[str(P) for P in Psa]
+    Psre=array([Psre1,Psre2,Psre3,Psre4])
+    qsre=array([P.pos[0] for P in Psre])
+    if len(qsre[qsre==123])==4:qine=1
+    if len(qsre[qsre==-123])==4:qoute=1
+    if (qine+qoute)==0:
+        Fsre=[Ringe,Ringe,Ringe,Ringe]
+        Qsre=array(\
+            [pointInFigure(F,P)\
+                 for F,P in zip(Fsre,Psre)])
+        Psre=sortPolygonVertices(Psre[Qsre>-FIGTOL])
+        Asre=convexPolygon(Psre)
+    else:
+        Asre=qine*FIGUREAREA(Ringe)
+    
+    #////////////////////////////////////////
+    #STAR AND INTERNAL RINGS
+    #////////////////////////////////////////
+    qini=0;qouti=0
+    Psri1,Psri2,Psri3,Psri4=eIc(Ringi,Star)
+    Psri1.name='Psri1';Psri2.name='Psri2';
+    Psri3.name='Psri3';Psri4.name='Psri4';
+    Psa+=[Psri1,Psri2,Psri3,Psri4]
+    Psn=[str(P) for P in Psa]
+    Psri=array([Psri1,Psri2,Psri3,Psri4])
+    qsri=array([P.pos[0] for P in Psri])
+    if len(qsri[qsri==123])==4:qine=1
+    if len(qsri[qsri==-123])==4:qoute=1
+    if (qini+qouti)==0:
+        Fsri=[Ringe,Ringe,Ringe,Ringe]
+        Qsri=array(\
+            [pointInFigure(F,P)\
+                 for F,P in zip(Fsri,Psri)])
+        Psri=sortPolygonVertices(Psri[Qsri>-FIGTOL])
+        Asri=convexPolygon(Psri)
+    else:
+        Asri=qini*FIGUREAREA(Ringi)
+
+    #////////////////////////////////////////
+    #COMMON POINTS
+    #////////////////////////////////////////
     #EXTERNAL RING
-    Ps=array([Ppre1,Ppre2,Ppre3,Ppre4])
-    Fs=[Planet,Planet,Planet,Planet]
+    Ps=array([Ppre1,Psre1,Ppre2,Psp2,Ppre3,
+              Psre2,Ppre4,Psp1,Psre3,Psre4])
+    Fs=[Star,Planet,Star,Ringe,Star,
+        Planet,Star,Ringe,Planet,Planet]
     Qs=array([pointInFigure(F,P) for F,P in zip(Fs,Ps)])
-    Pine=sortPolygonVertices(Ps[Qs>-FIGTOL])
-    if VERBOSE[0]:print "External Ring Exclusion Points: ",pointNames(Pine)
+    Pine=sortPolygonVertices(Ps[Qs>0])
+    line=len(Pine)
 
     #INTERNAL RING
-    Ps=array([Ppri1,Ppri2,Ppri3,Ppri4]) 
-    Fs=[Planet,Planet,Planet,Planet]
+    Ps=array([Ppri1,Psri1,Ppri2,Psp2,Ppri3,
+              Psri2,Ppri4,Psp1,Psri3,Psri4])
+    Fs=[Star,Planet,Star,Ringi,Star,
+        Planet,Star,Ringi,Planet,Planet]
     Qs=array([pointInFigure(F,P) for F,P in zip(Fs,Ps)])
-    Pini=sortPolygonVertices(Ps[Qs>-FIGTOL])
-    if VERBOSE[0]:print "Internal Ring Exclusion Points: ",pointNames(Pini)
+    Pini=sortPolygonVertices(Ps[Qs>0])
 
-    Pcusp=toPoint(AR(Planet.C[0],Planet.C[1]+Planet.b))
-    if VERBOSE[0]:print "Pcusp = ",Pcusp.pos
+    #////////////////////////////////////////
+    #COMMON AREAS
+    #////////////////////////////////////////
+    if len(Pine)==0 or len(Pini)==0:
+        Pcusp=toPoint(AR(Planet.C[0],Planet.C[1]+Planet.b))
+        qcusp=pointInFigure(Star,Pcusp)
     if len(Pine)==0:
-        qcusp=pointInFigure(Ringe,Pcusp)
-        if VERBOSE[0]:print "Condition Ringe= ",qcusp
-        if qcusp<-FIGTOL:Asrec=0.0
+        if qcusp<0:Asrec=0.0
         else:Asrec=Asp
     else:Asrec=convexPolygon(Pine)
     if len(Pini)==0:
-        qcusp=pointInFigure(Ringi,Pcusp)
-        if VERBOSE[0]:print "Condition Ringi= ",qcusp
-        if qcusp<-FIGTOL:Asric=0.0
+        if qcusp<0:Asric=0.0
         else:Asric=Asp
     else:Asric=convexPolygon(Pini)
 
-    if VERBOSE[0]:print "External ring common area: ",Asrec
-    if VERBOSE[0]:print "Internal ring common area: ",Asric
+    #////////////////////////////////////////
+    #TRANSIT AREA
+    #////////////////////////////////////////
+    try:
+        #WITH FINITE OPACITY
+        Atrans=Asp+S.block*((Asre-Asrec)-(Asri-Asric))
+    except:
+        #ASSUMING INFINITE OPACITY
+        Atrans=Asp+Asre-Asri-Asrec+Asric
 
-    #RINGED PLANET AREA
-    Aringed=Asp+Asre-Asri-Asrec+Asric
+    return Atrans,Asp,Asre,Asri,Asrec,Asric,Psa,Feqs
 
-    for P in Psa:
-        P.pos=rotTrans(P.pos,t,AR(0.0,0.0))
+def transitOblateAreaTime(t,S):
+    #UPDATE POSITION
+    updatePosition(S,t)
+    #AREAS
+    Es=transitOblateArea(S)
+    At=Es[0]
+    return At
 
-    return Aringed,Psa
+def transitOblateAreaTimeFast(t,tcs,Ar,S):
+    #ONLY COMPUTE AREA IF AT INGRESS OR EGRESS PHASE
+    if t<=tcs[1]:At=0
+    elif t<=tcs[2]:At=transitAreaOblateTime(t,S)
+    elif t<=tcs[3]:At=Ar
+    elif t<=tcs[4]:At=transitAreaOblateTime(t,S)
+    else:At=0
+    return At
 
+def contactFunction(t,S,sgn):
+    updatePosition(S,t)
+    d=extremePointMultiple((S.Planet,
+                            S.Ringext,
+                            S.Ringint),
+                           sgn=sgn)
+    return d-1
+
+def contactTime(S,Phase=EGRESS,Side=OUTSIDE,
+                tola=1E-3,tolx=0.0,maxfun=10):
+    """
+    Calculate contact time for system S
+    """
+    tmin=S.tcen+(Phase-1)*S.dtstar
+    tmax=S.tcen+(Phase+1)*S.dtstar
+    t=brentq(contactFunction,tmin,tmax,args=(S,Side))
+    return t
+
+def contactTimes(S):
+    """
+    Calculate contact times for system S
+    """
+    #CALCULATE EXTREME TIMES
+    t1=contactTime(S,Phase=INGRESS,Side=OUTSIDE)
+    t4=contactTime(S,Phase=EGRESS,Side=OUTSIDE)
+
+    #CHECK GRAZING TRANSIT
+    if S.grazing:
+        t2=t3=S.tcen
+    else:
+        t2=contactTime(S,Phase=INGRESS,Side=INSIDE)
+        t3=contactTime(S,Phase=EGRESS,Side=INSIDE)
+        
+    return S.tcen,t1,t2,t3,t4
+    
 def transitAreaMontecarlo(Planet,Ringe,Ringi,NP=1E3):
     """
     Compute transit area via Montecarlo integration
     """
-    Star=Figure(AR(0.0,0.0),1.0,1.0,0.0,'Star')
+    Star=Figure(AR(0.0,0.0),1.0,1.0,1.0,0.0,'Star')
 
     mA1,dA1,xs1,ys1=montecarloArea([Star,Ringe,Planet,Ringi],
                                    [+1,+1,-1,-1],Npoints=NP)
@@ -1532,7 +1538,6 @@ def plotEllipse(ax,F,patch=False,**args):
     C=F.C
     a=F.a
     b=F.b
-    t=F.t
     if patch:
         cir=pat.Circle((F.C[0],F.C[1]),F.a,**args)
         ax.add_patch(cir)
@@ -1540,7 +1545,7 @@ def plotEllipse(ax,F,patch=False,**args):
         Es=linspace(0,2*pi,1000)
         xs=a*cos(Es)
         ys=b*sin(Es)
-        rs=array([rotTrans(AR(x,y),t,C) for x,y in zip(xs,ys)])
+        rs=array([rotTrans(AR(x,y),F.cost,F.sint,C) for x,y in zip(xs,ys)])
         ax.plot(rs[:,0],rs[:,1],'-',**args)
         #ax.plot([C[0]],[C[1]],'ko')
         
@@ -1569,89 +1574,9 @@ Convention for interior or exterior:
 ###################################################
 #ADDITIONAL
 ###################################################
-def derivedSystemProperties(Mstar,Rstar,
-                            Mp,Rp,fp,
-                            fe,fi,tau,
-                            ap,ep,iorb,wp):
-    DPS=[]
-    
-    #ROTATION MATRICES
-    Mi=rotMat([1,0,0],-iorb)
-    Mw=rotMat([0,0,1],wp)
-    Mos=dot(Mi,Mw)
-    DPS+=[Mi,Mos]
-
-    Rp=Rp/Rstar
-    Ri=fi*Rp
-    Re=fe*Rp
-    DPS+=[Rp,Re,Ri]
-
-    Porb=2*pi*sqrt(ap**3/(GCONST*(Mstar+Mp))) #Period (s)
-    norb=2*pi/Porb
-    DPS+=[Porb,norb]
-
-    fcen=270*DEG-wp #Central true anomaly (rad)
-    Ecen=2*arctan(sqrt((1-ep)/(1+ep))*tan(fcen/2))
-    Mcen=Ecen-ep*sin(Ecen)
-    DPS+=[fcen]
-    
-    tcen=Mcen/norb
-    DPS+=[tcen]
-
-    rcen=ellipseRadiusE(ap,ep,fcen) #r central (km)
-    DPS+=[rcen]
-    
-    rpcen=AR3(rcen*cos(fcen),rcen*sin(fcen),0)
-    Pcen=dot(Mos,rpcen)
-    Borb=Pcen[1]/Rstar
-    DPS+=[Borb]
-    
-    qtransit=1
-    if abs(Borb)>1:qtransit=0
-    DPS+=[qtransit]
-    
-    return DPS
-
-def derivedRingProperties(phir,ir,
-                          Rstar,Rp,
-                          ap,ep,norb,Porb,Mi,Mos,
-                          rcen,fcen,Borb
-                          ):
-    DPS=[]
-    Mpr=rotMat([0,0,1],phir)
-    Mir=rotMat([1,0,0],-ir)
-    Mro=dot(Mpr,Mir)
-    Mrs=dot(Mi,Mro)
-    DPS+=[Mrs]
-
-    rx=dot(Mrs,[1.0,0.0,0.0])
-    ry=dot(Mrs,[0.0,1.0,0.0])
-    rz=dot(Mrs,[0.0,0.0,1.0])
-    ieff=arccos(abs(dot(rz,[0,0,1])))
-    teff=-sign(rz[0])*ARCTAN(abs(rz[0]),abs(rz[1]))
-    DPS+=[ieff,teff]
-
-    df=Rstar*sqrt(1-Borb**2)/rcen
-    f15=fcen-df
-    r15=ellipseRadiusE(ap,ep,f15) 
-    P15=dot(Mos,AR3(r15*cos(f15),r15*sin(f15),0))/Rstar
-    t15=timeOrbit(ep,norb,f15)
-    f35=fcen+df
-    r35=ellipseRadiusE(ap,ep,f35) 
-    t35=timeOrbit(ep,norb,f35)
-    P35=dot(Mos,AR3(r35*cos(f35),r35*sin(f35),0))/Rstar
-    if t15*t35<0 and t35<0:t35+=Porb
-    dtrans=t35-t15
-    DPS+=[dtrans]
-    dtplanet=dtrans*Rp
-    DPS+=[dtplanet]
-    
-    return DPS
-
 ###################################################
 #NUMERICAL INTERSECTION
 ###################################################
-VERB=0
 def parsE(F):
     a=F.a;a2=a**2
     b=F.b;b2=b**2
@@ -1684,6 +1609,20 @@ def trigFuncD2(E,F):
     f=2*(b2-a2)*c2E-2*x*a*cE-2*y*b*sE
     return f
 
+def uniqueReals(xs,xtol=1E-3):
+    es=array(xs)
+    ilen=len(es)
+    ns=[]
+    while ilen>0:
+        ies=array(range(ilen))
+        ns+=[es[0]]
+        dx=abs(es[0]-es)
+        cond=dx<=xtol
+        ires=ies[cond]
+        es=delete(es,ires)
+        ilen=len(es)
+    return ns
+
 def uniqueRoots(Es,F,xtol=1E-3):
     Er=sort(Es)
     fEr=trigFunc(Er,F)
@@ -1695,62 +1634,62 @@ def uniqueRoots(Es,F,xtol=1E-3):
     while len(zEs)>0:
         ilen=len(zEs)
         ies=array(range(ilen))
-        if VERB:print "ies = ",ies
+        #if VERB:print "ies = ",ies
         zE=zEs[0]
-        if VERB:print "zE = ",zE*RAD
+        #if VERB:print "zE = ",zE*RAD
         dE=abs(zE[0]-zEs[:,0])
-        if VERB:print "zEs = ",zEs[:,0]*RAD
-        if VERB:print "dE = ",dE*RAD
-        if VERB:print "xtol = ",xtol*RAD
+        #if VERB:print "zEs = ",zEs[:,0]*RAD
+        #if VERB:print "dE = ",dE*RAD
+        #if VERB:print "xtol = ",xtol*RAD
         cond=dE<=xtol
         ires=ies[cond]
-        if VERB:print "ires = ",ires
+        #if VERB:print "ires = ",ires
         cluster=zEs[ires]
-        if VERB:print "Cluster = ",cluster
+        #if VERB:print "Cluster = ",cluster
         clusters+=[cluster]
         zEs=delete(zEs,ires,axis=0)
-        if VERB:print "zEs = ",zEs
-        if VERB:raw_input()
+        #if VERB:print "zEs = ",zEs
+        #if VERB:raw_input()
 
     roots=[]
     for cluster in clusters:
-        if VERB:print "*"*80
+        #if VERB:print "*"*80
         isort=argsort(abs(cluster[:,2]))
-        if VERB:print "Sorted indexes: ",isort
+        #if VERB:print "Sorted indexes: ",isort
         cluster=cluster[isort]
         #cluster[-1,2]*=-1
-        if VERB:print "Sorted cluster: ",cluster
+        #if VERB:print "Sorted cluster: ",cluster
 
         while len(cluster)>0:
             ilen=len(cluster)
             root=cluster[0,0]
             droot=cluster[0,2]
             roots+=[root]
-            if VERB:print 
-            if VERB:print "Size of cluster = ",ilen
-            if VERB:print "Main root = ",root
-            if VERB:print "Derivative = ",droot
-            if VERB:print "Cummulative roots = ",roots
+            #if VERB:print 
+            #if VERB:print "Size of cluster = ",ilen
+            #if VERB:print "Main root = ",root
+            #if VERB:print "Derivative = ",droot
+            #if VERB:print "Cummulative roots = ",roots
             if ilen>1:
                 ies=array(range(ilen))
                 cond=droot*cluster[:,2]>0
                 ires=ies[cond]
             else:
-                if VERB:print "Only one element."
+                #if VERB:print "Only one element."
                 ires=ilen*[0]
 
-            if VERB:print "Common roots = ",ires
+            #if VERB:print "Common roots = ",ires
             if len(ires)==ilen:
-                if VERB:print "All values in cluster are the same."
-                if VERB:raw_input()
+                #if VERB:print "All values in cluster are the same."
+                #if VERB:raw_input()
                 break
             else:
                 cluster=delete(cluster,ires,axis=0)
-                if VERB:print "Remaining cluster = ",cluster
-            if VERB:raw_input()
+                #if VERB:print "Remaining cluster = ",cluster
+            #if VERB:raw_input()
 
-    if VERB:print "="*80
-    if VERB:print "Final roots = ",array(roots)*RAD
+    #if VERB:print "="*80
+    #if VERB:print "Final roots = ",array(roots)*RAD
     return roots
 
 def ellipseDistanceDerivative(s,F,sgn):
@@ -1762,50 +1701,142 @@ def ellipseDistanceDerivative(s,F,sgn):
     return f
 
 def extremePoint(Ellipse,sgn=-1):
+    C=array(Ellipse.C)
+
+    #IF ELLIPSE IS A CIRCLE
+    if EQUAL(Ellipse.a,Ellipse.b):
+        return MAG(C)+sgn*Ellipse.a
+
+    #IF AN ELLIPSE
+    Ellipse.C=abs(rotTrans(Ellipse.C,
+                           +Ellipse.cost,
+                           -Ellipse.sint,
+                           AR(0,0)))
     sE=brentq(ellipseDistanceDerivative,0,sgn,
               args=(Ellipse,sgn),xtol=DISTANCETOL)
     cE=sgn*(1-sE**2)**0.5
-    d=ellipsePointEcc(Ellipse,cE,sE)
-    D=MAG(d)
-    cP=d[0]/D
-    sP=d[1]/D
-    return cE,sE,cP,sP,D
+    d=MAG(ellipsePointEcc(Ellipse,cE,sE))
+    Ellipse.C=array(C)
+    return d
 
-def extremePointGeneral(Ellipse,sgn=-1):
-    C=rotTrans(Ellipse.C,-Ellipse.t,AR(0,0))
-    EllipseCor=Figure(C,
-                      Ellipse.a,Ellipse.b,
-                      0.0,'Corrected')
-    print "Equivalent Center = ",EllipseCor.C
-    EllipseCor.C=abs(EllipseCor.C)
-    cE,sE,cP,sP,D=extremePoint(EllipseCor,sgn=sgn)
-    return cE,sE,cP,sP,D,EllipseCor
+def extremePoints(Ellipse):
+    C=array(Ellipse.C)
 
-def eIcNumerical(F1,F2):
+    #IF ELLIPSE IS A CIRCLE
+    if EQUAL(Ellipse.a,Ellipse.b):
+        return MAG(C)-Ellipse.a,MAG(C)+Ellipse.a
+
+    #IF AN ELLIPSE
+    Ellipse.C=abs(rotTrans(Ellipse.C,
+                           +Ellipse.cost,
+                           -Ellipse.sint,
+                           AR(0,0)))
+
+    #CLOSEST
+    sE=brentq(ellipseDistanceDerivative,0,CLOSEST,
+              args=(Ellipse,CLOSEST),xtol=DISTANCETOL)
+    cE=CLOSEST*(1-sE**2)**0.5
+    dc=MAG(ellipsePointEcc(Ellipse,cE,sE))
+
+    #FARTHEST
+    sE=brentq(ellipseDistanceDerivative,0,FARTHEST,
+              args=(Ellipse,FARTHEST),xtol=DISTANCETOL)
+    cE=FARTHEST*(1-sE**2)**0.5
+    df=MAG(ellipsePointEcc(Ellipse,cE,sE))
+
+    Ellipse.C=array(C)
+    return dc,df
+
+def extremePointMultiple(Figures,sgn=-1):
+    ds=[]
+    for Figure in Figures:
+        if EQUAL(Figure.b,ZERO):continue
+        ds+=[extremePoint(Figure,sgn=sgn)]
+    if sgn>0:d=max(ds)
+    else:d=min(ds)
+    return d
+
+def extremePointsMultiple(Figures):
+    ds=[]
+    for Figure in Figures:
+        if EQUAL(Figure.b,ZERO):continue
+        ds+=[extremePoints(Figure)]
+    dc=min(array(ds)[:,0])
+    df=max(array(ds)[:,1])
+    return dc,df
+
+def eIc(EL,UC):
     """
     Computes the 4 intersection points between an ellipse
-    (F1) and an unitary circle (F2).
+    (EL) and an unitary circle (UC).
     """
-    
     #FIND THE FIRST GUESS
     xtol=INTERTOL
-    E0=fsolve(trigFunc,0,args=(F1,),xtol=xtol)
+    E0=fsolve(trigFunc,0,args=(EL,),xtol=xtol)
     E0=mod(E0,2*pi)
     
     #CREATE AN ARRAY OF SEARCHING POINTS
     Es=linspace(E0,E0+2*pi,10)
 
     #SOLVE AROUND SEARCHING POINTS
-    Eos=fsolve(trigFunc,Es,args=(F1,),xtol=xtol)
+    Eos=fsolve(trigFunc,Es,args=(EL,),xtol=xtol)
     Eos=mod(Eos,2*pi)
 
     #SELECT ONLY THOSE POINTS FULFILLING FUNCTION 
-    fEos=trigFunc(Eos,F1)
+    fEos=trigFunc(Eos,EL)
     cond=abs(fEos)<INTERFUNTOL
     Eos=Eos[cond]
 
     #SELECT UNIQUE ROOTS
-    Eos=uniqueRoots(Eos,F1,xtol=ANGLETOL)
+    Es=uniqueRoots(Eos,EL,xtol=ANGLETOL)
+    #print "Ellipse %s, number of points: "%EL.name,len(Es)
+
+    #CHECK IF AN EXCESS OF POINTS HAS BEEN CALCULATED
+    xtol=ANGLETOL
+    while len(Es)>4:
+        #print "Correcting:",array(Es)*RAD
+        Es=uniqueReals(Es,xtol=xtol)
+        xtol+=1
+        #print "Corrected:",array(Es)*RAD
+
+    #CREATE LIST OF POINTS
+    Ps=[]
+    for E in Es:
+        P=toPoint(ellipsePointEcc(EL,cos(E),sin(E)))
+        P.fig1=EL;P.fig2=UC
+        Ps+=[P]
+        
+    #RETURN POINTS
+    if MAG(EL.C)<1:q=+1
+    else:q=-1
+    Ps+=[Point(AR(123*q,123*q),EL,UC)]*(4-len(Ps))
+
+    return Ps
+
+def eIcNumerical(EL,UC):
+    """
+    Computes the 4 intersection points between an ellipse
+    (EL) and an unitary circle (UC).
+    """
+    #FIND THE FIRST GUESS
+    xtol=INTERTOL
+    E0=fsolve(trigFunc,0,args=(EL,),xtol=xtol)
+    E0=mod(E0,2*pi)
+    
+    #CREATE AN ARRAY OF SEARCHING POINTS
+    Es=linspace(E0,E0+2*pi,10)
+
+    #SOLVE AROUND SEARCHING POINTS
+    Eos=fsolve(trigFunc,Es,args=(EL,),xtol=xtol)
+    Eos=mod(Eos,2*pi)
+
+    #SELECT ONLY THOSE POINTS FULFILLING FUNCTION 
+    fEos=trigFunc(Eos,EL)
+    cond=abs(fEos)<INTERFUNTOL
+    Eos=Eos[cond]
+
+    #SELECT UNIQUE ROOTS
+    Eos=uniqueRoots(Eos,EL,xtol=ANGLETOL)
 
     return array(Eos)
 
@@ -1840,7 +1871,7 @@ def EoK(E,e=0.0,M=0.0):
     return E-e*sin(E)-M
 
 def eccentricAnomalyNumerical(e,M):
-    E=newton(EoK,M,args=(e,M),tol=1E-9)    
+    E=newton(EoK,M,args=(e,M),tol=1E-15)    
     return E
 
 def eccentricAnomalyFast(e,M):
@@ -1857,11 +1888,14 @@ def eccentricAnomalyFast(e,M):
     E=M+e*(3*w-4*x**3);
 
     #NEWTON CORRECTION 1
-    f=(E-e*sin(E)-M);
-    fd=1-e*cos(E);
-    f2d=e*sin(E);
-    f3d=-e*cos(E);
-    f4d=e*sin(E);
+    sE=sin(E)
+    cE=cos(E)
+
+    f=(E-e*sE-M);
+    fd=1-e*cE;
+    f2d=e*sE;
+    f3d=-e*cE;
+    f4d=e*sE;
     E=E-f/fd*(1+\
                   f*f2d/(2*fd*fd)+\
                   f*f*(3*f2d*f2d-fd*f3d)/(6*fd**4)+\
@@ -1869,14 +1903,240 @@ def eccentricAnomalyFast(e,M):
                   f**3/(24*fd**6))
 
     #NEWTON CORRECTION 2
-    f=(E-e*sin(E)-M);
-    fd=1-e*cos(E);
-    f2d=e*sin(E);
-    f3d=-e*cos(E);
-    f4d=e*sin(E);
+    f=(E-e*sE-M);
+    fd=1-e*cE;
+    f2d=e*sE;
+    f3d=-e*cE;
+    f4d=e*sE;
     E=E-f/fd*(1+\
                   f*f2d/(2*fd*fd)+\
                   f*f*(3*f2d*f2d-fd*f3d)/(6*fd**4)+\
                   (10*fd*f2d*f3d-15*f2d**3-fd**2*f4d)*\
                   f**3/(24*fd**6))
     return E
+
+def derivedSystemProperties(S):
+
+    #STAR
+    S.Flux=S.qeff*planckPhotons(500*NANO,700*NANO,S.Tstar)*S.Rstar**2/S.Dstar**2*(4*pi*S.Ddet**2)
+    
+    #ROTATION MATRICES
+    S.Mi=rotMat([1,0,0],-S.iorb)
+    S.Mw=rotMat([0,0,1],S.wp)
+    S.Mos=dot(S.Mi,S.Mw)
+    
+    #RINGS
+    S.Rp=S.Rplanet/S.Rstar
+    S.Ri=S.fi*S.Rp
+    S.Re=S.fe*S.Rp
+
+    #ORBIT
+    S.Porb=2*pi*sqrt(S.ap**3/(GCONST*(S.Mstar+S.Mplanet)))
+    S.norb=2*pi/S.Porb
+
+    S.fcen=270*DEG-S.wp
+    S.Ecen=2*arctan(sqrt((1-S.ep)/(1+S.ep))*tan(S.fcen/2))
+    S.Mcen=S.Ecen-S.ep*sin(S.Ecen)
+    
+    S.tcen=S.Mcen/S.norb
+    S.rcen=ellipseRadiusE(S.ap,S.ep,S.fcen)
+    
+    rpcen=AR3(S.rcen*cos(S.fcen),S.rcen*sin(S.fcen),0)
+    S.Pcen=dot(S.Mos,rpcen)
+    S.Borb=S.Pcen[1]/S.Rstar
+    
+    S.orbit=Orbit(S.ap/S.Rstar,S.ep,S.Porb,S.Mos)
+    
+    if abs(S.Borb)>1:
+        print "This configuration does not lead to a transit."
+        exit(1)
+        
+    S.C=AR(0,0)
+    S.Star=Figure(AR(0,0),
+                  1.0,1.0,
+                  1.0,0.0,
+                  'Star')
+    S.Planet=Figure(S.C,
+                    S.Rp,S.Rp*(1-S.fp),
+                    1.0,0.0,
+                    'Planet')
+
+def updatePlanetRings(S,phir,ir):
+
+    #//////////////////////////////////////////////////
+    #ROTATION MATRIX FROM EQUATORIAL SYSTEM TO SKY
+    #//////////////////////////////////////////////////
+    Mpr=rotMat([0,0,1],phir)
+    Mir=rotMat([1,0,0],-ir)
+    Mro=dot(Mpr,Mir)
+    S.Mrs=dot(S.Mi,Mro)
+
+    #//////////////////////////////////////////////////
+    #EFFECTIVE ROTATION AND ROLL
+    #//////////////////////////////////////////////////
+    rx=dot(S.Mrs,[1.0,0.0,0.0])
+    ry=dot(S.Mrs,[0.0,1.0,0.0])
+    rz=dot(S.Mrs,[0.0,0.0,1.0])
+    S.ieff=arccos(abs(dot(rz,[0,0,1])))
+    S.teff=-sign(rz[0])*ARCTAN(abs(rz[0]),abs(rz[1]))
+
+    #//////////////////////////////////////////////////
+    #PLANET SHAPE
+    #//////////////////////////////////////////////////
+    #See theorem at: 
+    #http://twisee.com/all/484872495980625920
+    a=S.Planet.a
+    b=S.Planet.b
+    S.Planet.b=b*(sin(S.ieff)**2+\
+                      (a/b)**2*cos(S.ieff)**2)**0.5
+    S.Planet.cost=cos(S.teff)
+    S.Planet.sint=sin(S.teff)
+    
+    #//////////////////////////////////////////////////
+    #RING BLOCK FACTOR
+    #//////////////////////////////////////////////////
+    if EQUAL(S.ieff,90.0):S.block=1.0
+    elif EQUAL(S.tau,ZERO):S.block=0.0
+    else:S.block=1-exp(-S.tau/cos(S.ieff))
+
+    #//////////////////////////////////////////////////
+    #ESTIMATED CONTACT TIMES
+    #//////////////////////////////////////////////////
+    df=S.Rstar*sqrt(1-S.Borb**2)/S.rcen
+    f15=S.fcen-df
+    r15=ellipseRadiusE(S.ap,S.ep,f15) 
+    P15=dot(S.Mos,AR3(r15*cos(f15),r15*sin(f15),0))/S.Rstar
+    t15=timeOrbit(S.ep,S.norb,f15)
+    f35=S.fcen+df
+    r35=ellipseRadiusE(S.ap,S.ep,f35) 
+    t35=timeOrbit(S.ep,S.norb,f35)
+    P35=dot(S.Mos,AR3(r35*cos(f35),r35*sin(f35),0))/S.Rstar
+    if t15*t35<0 and t35<0:t35+=Porb
+
+    #ESTIMATED TRANSIT TIME
+    S.dtrans=t35-t15
+
+    #TIME TO COVER THE PLANETARY RADIUS
+    df=S.Rplanet/S.rcen
+    f=S.fcen-df
+    r=ellipseRadiusE(S.ap,S.ep,f) 
+    P=dot(S.Mos,AR3(r*cos(f),r*sin(f),0))/S.Rstar
+    t=timeOrbit(S.ep,S.norb,f)
+    S.dtplanet=S.tcen-t
+
+    #TIME TO COVER THE RADIUS OF THE STAR
+    df=S.Rstar/S.rcen
+    f=S.fcen-df
+    r=ellipseRadiusE(S.ap,S.ep,f) 
+    P=dot(S.Mos,AR3(r*cos(f),r*sin(f),0))/S.Rstar
+    t=timeOrbit(S.ep,S.norb,f)
+    S.dtstar=S.tcen-t
+    
+    #CREATE RING OBJECTS
+    S.Ringext=Figure(S.C,
+                     S.Re,S.Re*cos(S.ieff),
+                     cos(S.teff),sin(S.teff),
+                     'Ringext')
+    S.Ringint=Figure(S.C,
+                     S.Ri,S.Ri*cos(S.ieff),
+                     cos(S.teff),sin(S.teff),
+                     'Ringint')
+
+    #CHECK IF GRAZING
+    updatePosition(S,S.tcen)
+    df=extremePointMultiple((S.Planet,
+                             S.Ringext,
+                             S.Ringint),
+                            sgn=FARTHEST)
+
+    if df>1:
+        print "Grazing configuration."
+        S.grazing=1
+    else:
+        S.grazing=0
+    
+def systemShow(S):
+    pass
+    print "Star primary:"
+    print TAB,"Ms = %e kg"%S.Mstar
+    print TAB,"Rs = %e kg"%S.Rstar
+    print "Planet primary:"
+    print TAB,"Mp = %e kg = %e Mstar"%(S.Mplanet,
+                                       S.Mplanet/S.Mstar)
+    print TAB,"Rp = %e kg = %e Rstar"%(S.Rplanet,
+                                       S.Rplanet/S.Rstar)
+    print "Rings primary:"
+    print TAB,"fi,fe = %e,%e Rp"%(S.fi,S.fe)
+    print TAB,"Inclination (orbit) = %.1f deg"%(S.ir*RAD)
+    print TAB,"Roll (orbit) = %.1f deg"%(S.phir*RAD)
+    print TAB,"Opacity = %.2f"%(S.tau)
+    print "Orbit primary:"
+    print TAB,"ap = %e km = %e AU = %e Rstar"%(S.ap,
+                                               S.ap/AU,
+                                               S.ap/S.Rstar)
+    print TAB,"Eccentricity = %.2f"%(S.ep)
+    print TAB,"Inclination (visual) = %.2f deg"%(S.iorb*RAD)
+    print TAB,"Periapsis argument = %.2f deg"%(S.wp*RAD)
+    print
+    print "Star derivative:"
+    print "Planetary derivative:"
+    print TAB,"Radius (relative) = %e Rstar"%(S.Rp)
+    print "Rings derivative:"
+    print TAB,"Internal ring (relative) = %.2f Rstar"%(S.Ri)
+    print TAB,"External ring (relative) = %.2f Rstar"%(S.Re)
+    print TAB,"Apparent inclination = %.2f deg"%(S.ieff*RAD)
+    print TAB,"Apparent roll = %.2f deg"%(S.teff*RAD)
+    print "Orbit derivative:"
+    print TAB,"Period = %e s = %e h = %e d = %e yr"%(S.Porb,S.Porb/HOUR,S.Porb/DAY,S.Porb/YEAR)
+    print TAB,"Mean Angular velocity = %e rad/s = %e Rstar/s = %e Rp/s"%(S.norb,S.norb*S.rcen/S.Rstar,S.norb*S.rcen/(S.Rp*S.Rstar))
+    print TAB,"Central true anomaly = %e deg"%(S.fcen*RAD)
+    print TAB,"Central eccentric anomaly = %e deg"%(S.Ecen*RAD)
+    print TAB,"Central mean anomaly = %e deg"%(S.Mcen*RAD)
+    print TAB,"Central radius = %e km = %e AU = %e Rstar"%(S.rcen,S.rcen/AU,S.rcen/S.Rstar)
+    print TAB,"Impact parameter = %e Rstar"%(S.Borb)
+    print TAB,"Central time = %e s = %e Porb"%(S.tcen,S.tcen/S.Porb)
+    print TAB,"Estimated transit duration = %e s = %e h"%(S.dtrans,S.dtrans/3600.0)
+
+def updatePosition(S,t):
+    S.t=t
+    S.Mt=S.orbit.n*t
+    S.Et=eccentricAnomalyFast(S.orbit.e,S.Mt)
+    S.rp=[S.orbit.a*cos(S.Et)-S.orbit.a*S.orbit.e,
+          S.orbit.b*sin(S.Et),0.0]
+    S.rs=dot(S.orbit.Mos,S.rp)
+    S.C=AR(S.rs[0],S.rs[1])
+    S.Planet.C=S.Ringext.C=S.Ringint.C=S.C
+
+def planckPhotonDistrib(lamb,T):
+    B=2*HP*CSPEED**2/(lamb**5)/\
+        (exp(HP*CSPEED/(KB*T*lamb))-1)
+    J=pi*B/(HP*CSPEED/lamb)
+    return J
+
+def planckPhotons(lamb1,lamb2,T):
+    N,dN=integrate(planckPhotonDistrib,
+                   lamb1,lamb2,args=(T,))
+    return N
+
+def gaussianQuadrature(func,a,b,args=(0,)):
+    x1=0
+    x2=+(3./5)**0.5
+    x3=-x2
+    w1=8./9
+    w2=w3=5./9
+    bam2=(b-a)/2
+    bap2=(b+a)/2
+    try:
+        integral=bam2*(w1*func(bam2*x1+bap2,*args)+
+                       w2*func(bam2*x2+bap2,*args)+
+                       w3*func(bam2*x3+bap2,*args))
+    except:
+        integral=bam2*(w1*func(bam2*x1+bap2,*args)+
+                       w2*func(bam2*x2+bap2,*args)+
+                       w3*func(bam2*x3+bap2,*args))
+    return integral
+
+def onlyPlanet(S):
+    P=copyObject(S)
+    P.Ringext.b=P.Ringint.b=0.0
+    return P
