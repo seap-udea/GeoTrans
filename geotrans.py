@@ -7,6 +7,7 @@ from cmath import sqrt as csqrt,phase
 from scipy import constants as const
 from scipy.optimize import newton,brentq,fsolve
 from scipy.integrate import quad as integrate
+from scipy.interpolate import interp1d as interpolant
 from sys import argv,exit
 from os import system
 from numpy import *
@@ -56,7 +57,6 @@ DISTANCETOL=1E-15
 NORINGTOL=1E-5
 
 #OTHER
-IMAGTOL=1E-5
 FIGTOL=8E-3
 
 #//////////////////////////////
@@ -320,8 +320,11 @@ def FIGUREAREA(F):
     """
     Compute the area of figure F
     """
-    if F.b/F.a<NORINGTOL:return 0
-    else:return pi*F.a*F.b
+    try:
+        return F.area()
+    except:
+        if F.b/F.a<NORINGTOL:return 0
+        else:return pi*F.a*F.b
 
 def ellipseCoefficients(F):
     """
@@ -1168,7 +1171,7 @@ def transitArea(S):
     #////////////////////////////////////////
     #IF NO RINGS (i=90) USE ONLY PLANET
     #////////////////////////////////////////
-    if Ringe.a==0 or Reb/Rea<NORINGTOL:
+    if Rea==0 or Reb/Rea<NORINGTOL:
         return Asp,Asp,0,0,0,0,Psa,Feqs
 
     #////////////////////////////////////////
@@ -1191,7 +1194,6 @@ def transitArea(S):
     Psre1.name='Psre1';Psre2.name='Psre2';
     Psre3.name='Psre3';Psre4.name='Psre4';
     Psa+=[Psre1,Psre2,Psre3,Psre4]
-    Psn=[str(P) for P in Psa]
     Psre=array([Psre1,Psre2,Psre3,Psre4])
     qsre=array([P.pos[0] for P in Psre])
     if len(qsre[qsre==123])==4:qine=1
@@ -1214,13 +1216,12 @@ def transitArea(S):
     Psri1.name='Psri1';Psri2.name='Psri2';
     Psri3.name='Psri3';Psri4.name='Psri4';
     Psa+=[Psri1,Psri2,Psri3,Psri4]
-    Psn=[str(P) for P in Psa]
     Psri=array([Psri1,Psri2,Psri3,Psri4])
     qsri=array([P.pos[0] for P in Psri])
-    if len(qsri[qsri==123])==4:qine=1
-    if len(qsri[qsri==-123])==4:qoute=1
+    if len(qsri[qsri==123])==4:qini=1
+    if len(qsri[qsri==-123])==4:qouti=1
     if (qini+qouti)==0:
-        Fsri=[Ringe,Ringe,Ringe,Ringe]
+        Fsri=[Ringi,Ringi,Ringi,Ringi]
         Qsri=array(\
             [pointInFigure(F,P)\
                  for F,P in zip(Fsri,Psri)])
@@ -1240,7 +1241,6 @@ def transitArea(S):
     Qs=array([pointInFigure(F,P) for F,P in zip(Fs,Ps)])
     Pine=sortPolygonVertices(Ps[Qs>0])
     line=len(Pine)
-
     #INTERNAL RING
     Ps=array([Ppri1,Psri1,Ppri2,Psp2,Ppri3,
               Psri2,Ppri4,Psp1,Psri3,Psri4])
@@ -1357,15 +1357,15 @@ def transitAreaOblate(S):
     #////////////////////////////////////////
     return Asp,Psa,Feqs
 
-def transitOblateAreaTime(t,S):
+def transitAreaOblateTime(t,S):
     #UPDATE POSITION
     updatePosition(S,t)
     #AREAS
-    Es=transitOblateArea(S)
+    Es=transitAreaOblate(S)
     At=Es[0]
     return At
 
-def transitOblateAreaTimeFast(t,tcs,Ar,S):
+def transitAreaOblateTimeFast(t,tcs,Ar,S):
     #ONLY COMPUTE AREA IF AT INGRESS OR EGRESS PHASE
     if t<=tcs[1]:At=0
     elif t<=tcs[2]:At=transitAreaOblateTime(t,S)
@@ -2056,3 +2056,25 @@ def onlyPlanet(S):
     P=copyObject(S)
     P.Ringext.b=P.Ringint.b=0.0
     return P
+
+def limbDarkening(u,c1,c2):
+    """
+    TYPICAL VALUES (Brown et al. (2001))
+    c1=0.65
+    c2=-0.055
+    SUN (Wikipedia a1=0.93, a2=-0.23)
+    c1=a1+a2=0.7
+    c2=-a1-3*a2=-0.24
+    """
+    I=1-c1*(1-u)*(2-u)/2+c2*(1-u)*u/2
+    return I
+
+def limbDarkeningPhysical(rho,c1,c2):
+    u=cos(arcsin(rho))
+    I=limbDarkening(u,c1,c2)
+    return I
+
+def limbDarkeningNormalized(rho,c1,c2):
+    norm=2*pi/24*(12-3*c1+c2)
+    i=limbDarkeningPhysical(rho,c1,c2)/norm
+    return i
