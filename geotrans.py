@@ -32,8 +32,10 @@ AR=lambda x,y:array([x,y])
 AR3=lambda x,y,z:array([x,y,z])
 ARCTAN=lambda num,den:mod(arctan2(num,den),2*pi)
 EQUAL=lambda x,y:abs(x-y)<=ZERO
-LESSTHAN=lambda x,y:(x-y)<ZERO
+LESSTHAN=lambda x,y:(x-y)<-ZERO
 GREATERTHAN=lambda x,y:(x-y)>ZERO
+LESSEQUAL=lambda x,y:(x-y)<=-ZERO
+GREATEREQUAL=lambda x,y:(x-y)>=ZERO
 DENSITY=lambda M,R:M/(4*pi/3*R**3)
 def VERB(routine):print BARL,routine,RBAR
 
@@ -502,8 +504,13 @@ def qCircleCircle(F1,F2):
     """
     R1=F1.a;R2=F2.a
     D=MAG(F2.C-F1.C)
-    if D>=(R1+R2):return -1
-    if D<=abs(R1-R2):return 1
+    #print "D=%.17e,R1+R2=%.17e,|R1-R2|=%.17e"%(D,R1+R2,abs(R1-R2))
+    #print "D-(R1+R2)=%.17e,D-abs(R1-R2)=%.17e"%(D-(R1+R2),D-abs(R1-R2))
+
+    if D>=(R1+R2):
+        return -1
+    elif D<=abs(R1-R2):
+        return 1
     return 0
 
 def cIc(F1,F2):
@@ -1122,6 +1129,7 @@ def ringedPlanetArea(S):
 #//////////////////////////////
 #TRANSIT AREA
 #//////////////////////////////
+VERBLIMB=1
 def transitArea(S):
     """
     Compute transit area of planet with its rings (Ringe, Ringi) over
@@ -1178,11 +1186,16 @@ def transitArea(S):
     Psp1.name='Psp1';Psp2.name='Psp2';
     Psa+=[Psp1,Psp2]
     Asp=leafArea((Psp1,Psp2))
+    if abs(Asp)<=ZERO and MAG(Cg)<1:Asp=FIGUREAREA(Planet)
 
     #////////////////////////////////////////
     #IF NO RINGS (i=90) USE ONLY PLANET
     #////////////////////////////////////////
     if Rea==0 or Reb/Rea<NORINGTOL:
+        if VERBLIMB or False:
+            print TAB,"Psp = ",\
+                Psp1.pos,Psp2.pos
+            print TAB,"Asp = ",Asp
         return Asp,Asp,0,0,0,0,Psa,Feqs
 
     #////////////////////////////////////////
@@ -1275,14 +1288,15 @@ def transitArea(S):
         else:Asric=Asp
     else:Asric=convexPolygon(Pini)
 
-    """
-    print "Asp = ",Asp
-    print "Asre = ",Asre
-    print "Asri = ",Asri
-    print "Asrec = ",Asrec
-    print "Asric = ",Asric
-    print "Psre = ",Psre1.pos,Psre2.pos,Psre3.pos,Psre4.pos
-    """
+    if VERBLIMB or False:
+        print TAB,"Asp = ",Asp
+        print TAB,"Asre = ",Asre
+        print TAB,"Asri = ",Asri
+        print TAB,"Asrec = ",Asrec
+        print TAB,"Asric = ",Asric
+        print TAB,"Psre = ",\
+            Psre1.pos,Psre2.pos,\
+            Psre3.pos,Psre4.pos
 
     #////////////////////////////////////////
     #TRANSIT AREA
@@ -1303,6 +1317,44 @@ def transitAreaTime(t,S):
     Es=transitArea(S)
     At=Es[0]
     return At
+
+def fluxLimbTime(t,Ar,S):
+    #UPDATE POSITION
+    updatePosition(S,t)
+    if VERBLIMB:print "\nTime: ",(t-S.tcen)/HOUR
+    if VERBLIMB:print "Center: ",S.Planet.C
+
+    #EXTREMES
+    dc,df=extremePointsMultiple((S.Planet,S.Ringext))
+    if VERBLIMB:print "Extremes:",dc,df
+    if dc>1:
+        if VERBLIMB:print "No transit."
+        return 1.0
+    
+    #LIMB STRIPING
+    deltad=(df-dc)/10.0
+    ds=secureArange(dc,min(1,df),deltad)
+    ds=limbStriping(ds,S.c1,S.c2)
+    if VERBLIMB:print "Sampling points: ",ds
+    if len(ds)==2 and df<1:
+        if VERBLIMB:print "Whole area."
+        Ats=[Ar]
+    else:
+        Ats=areaStriping(S,ds)
+    if VERBLIMB:
+        if len(array(Ats)[array(Ats)<0])>0:
+            print 2*TAB,"** NEGATIVE AREA **"
+    iss=limbDarkeningNormalized(ds[:-1],S.c1,S.c2)
+    if VERBLIMB:print "Areas: ",Ats
+    if VERBLIMB:print "**Check Area: ",array(Ats).sum()," (compared to :",Ar,")"
+    if VERBLIMB:print "Limb darkening: ",iss
+    #raw_input()
+    ifs=Ats*iss
+    iF=ifs.sum()
+    if VERBLIMB:print "Weighted area: ",ifs
+    if VERBLIMB:print "Residual flux: ",iF
+    #raw_input()
+    return 1-iF
 
 def transitAreaTimeFast(t,tcs,Ar,S):
     #ONLY COMPUTE AREA IF AT INGRESS OR EGRESS PHASE
@@ -1897,7 +1949,10 @@ def derivedSystemProperties(S):
                     1.0,0.0,
                     'Planet')
 
-def updatePlanetRings(S,phir,ir):
+def updatePlanetRings(S,phir=123,ir=123):
+
+    if phir==123:phir=S.phir
+    if ir==123:ir=S.ir
 
     #//////////////////////////////////////////////////
     #ROTATION MATRIX FROM EQUATORIAL SYSTEM TO SKY
