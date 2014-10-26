@@ -32,6 +32,8 @@ AR=lambda x,y:array([x,y])
 AR3=lambda x,y,z:array([x,y,z])
 ARCTAN=lambda num,den:mod(arctan2(num,den),2*pi)
 EQUAL=lambda x,y:abs(x-y)<=ZERO
+LESSTHAN=lambda x,y:(x-y)<ZERO
+GREATERTHAN=lambda x,y:(x-y)>ZERO
 DENSITY=lambda M,R:M/(4*pi/3*R**3)
 def VERB(routine):print BARL,routine,RBAR
 
@@ -209,6 +211,9 @@ def copyObject(obj):
             new[key]=inew
         except:
             pass
+        if isinstance(var,ndarray):
+            new[key]=copy(var)
+
     nobj=dict2obj(new)
     return nobj
 
@@ -778,7 +783,7 @@ def planeQuad(Ps):
     Aq=sqrt(prod(s-S)-0.25*(a*c+b*d+p*q)*(a*c+b*d-p*q))
     return Aq
 
-def montecarloArea(Fs,oper,Npoints=1E3):
+def montecarloArea(Fs,oper,Npoints=1E3,excl=1):
     """
     Calculate an area using montecarlo integration.
 
@@ -791,7 +796,7 @@ def montecarloArea(Fs,oper,Npoints=1E3):
     sinEs=sin(Es)
     xs=array([])
     ys=array([])
-    for F in Fs[1:]:
+    for F in Fs[excl:]:
         C=F.C
         cost=F.cost;sint=F.sint
         x=C[0];y=C[1]
@@ -1119,7 +1124,7 @@ def ringedPlanetArea(S):
 #//////////////////////////////
 def transitArea(S):
     """
-    Compute transit area of planet with his rings (Ringe, Ringi) over
+    Compute transit area of planet with its rings (Ringe, Ringi) over
     a star with unitary radius.
     ** OPTIMIZE A LOT
     """
@@ -1156,6 +1161,12 @@ def transitArea(S):
     Ringe=Figure(Cg,Rea,Reb,1.0,0.0,'Ringe')
     Ringi=Figure(Cg,Ria,Rib,1.0,0.0,'Ringi')
     Feqs=[Planet,Ringe,Ringi]
+
+    """
+    print "Planet : ",Planet
+    print "Ringi : ",Ringi
+    print "Ringe : ",Ringe
+    """
 
     #INTERSECTION POINTS
     Psa=[]
@@ -1196,8 +1207,8 @@ def transitArea(S):
     Psa+=[Psre1,Psre2,Psre3,Psre4]
     Psre=array([Psre1,Psre2,Psre3,Psre4])
     qsre=array([P.pos[0] for P in Psre])
-    if len(qsre[qsre==123])==4:qine=1
-    if len(qsre[qsre==-123])==4:qoute=1
+    if len(qsre[qsre==123])>=3:qine=1
+    if len(qsre[qsre==-123])>=3:qoute=1
     if (qine+qoute)==0:
         Fsre=[Ringe,Ringe,Ringe,Ringe]
         Qsre=array(\
@@ -1218,8 +1229,8 @@ def transitArea(S):
     Psa+=[Psri1,Psri2,Psri3,Psri4]
     Psri=array([Psri1,Psri2,Psri3,Psri4])
     qsri=array([P.pos[0] for P in Psri])
-    if len(qsri[qsri==123])==4:qini=1
-    if len(qsri[qsri==-123])==4:qouti=1
+    if len(qsri[qsri==123])>=3:qini=1
+    if len(qsri[qsri==-123])>=3:qouti=1
     if (qini+qouti)==0:
         Fsri=[Ringi,Ringi,Ringi,Ringi]
         Qsri=array(\
@@ -1263,6 +1274,15 @@ def transitArea(S):
         if qcusp<0:Asric=0.0
         else:Asric=Asp
     else:Asric=convexPolygon(Pini)
+
+    """
+    print "Asp = ",Asp
+    print "Asre = ",Asre
+    print "Asri = ",Asri
+    print "Asrec = ",Asrec
+    print "Asric = ",Asric
+    print "Psre = ",Psre1.pos,Psre2.pos,Psre3.pos,Psre4.pos
+    """
 
     #////////////////////////////////////////
     #TRANSIT AREA
@@ -1957,6 +1977,12 @@ def updatePlanetRings(S,phir,ir):
                      S.Ri,S.Ri*cos(S.ieff),
                      cos(S.teff),sin(S.teff),
                      'Ringint')
+    
+    #PLANET AND RINGS PROJECTED AREA
+    S.Ar=ringedPlanetArea(S)
+    
+    #PLANET AREA
+    S.Ap=ringedPlanetArea(S)
 
     #CHECK IF GRAZING
     updatePosition(S,S.tcen)
@@ -2070,11 +2096,133 @@ def limbDarkening(u,c1,c2):
     return I
 
 def limbDarkeningPhysical(rho,c1,c2):
-    u=cos(arcsin(rho))
+    """
+    Limb darkening function I(rho) (Brown et al. 2001)
+    c1=a1+a2
+    c2=-a1-3*a2
+    """
+    #u=cos(arcsin(rho))
+    u=(1-rho**2)**0.5
     I=limbDarkening(u,c1,c2)
     return I
 
 def limbDarkeningNormalized(rho,c1,c2):
+    """
+    i(rho) = I(rho)/int_0^1 rho I(rho) drho
+    """
     norm=2*pi/24*(12-3*c1+c2)
     i=limbDarkeningPhysical(rho,c1,c2)/norm
     return i
+
+def dlimbDarkeningNormalized(rho,c1,c2):
+    """
+    Derivative of limb darkening
+    """
+    u=(1-rho**2)**0.5
+    dIdr=0.5*rho*(c1*(2-3/u)+c2*(2-1/u))
+    return dIdr
+
+def scaleFigure(F,fac):
+    F.C*=fac
+    F.a*=fac
+    F.b*=fac
+
+def scaleSystem(S,fac):
+    S.Planet.C*=fac
+    S.Ringext.C*=fac
+    S.Ringint.C*=fac
+    S.Planet.a*=fac
+    S.Ringext.a*=fac
+    S.Ringint.a*=fac
+    S.Planet.b*=fac
+    S.Ringext.b*=fac
+    S.Ringint.b*=fac
+
+def stripArea(S,Rlow,Rup):
+    """
+    Compute the area of a planetary strip between
+    """
+    Planet=copyObject(S.Planet)
+    Ringe=copyObject(S.Ringext)
+    Ringi=copyObject(S.Ringint)
+    
+    #////////////////////////////////////////
+    #ADJUST PROPERTIES FOR R1
+    #////////////////////////////////////////
+    #print "Original figures = ",Planet.a,Ringe.a,Ringi.a
+    scaleFigure(Planet,1./Rlow)
+    scaleFigure(Ringe,1./Rlow)
+    scaleFigure(Ringi,1./Rlow)
+    #print "Scaled figures = ",Planet.a,Ringe.a,Ringi.a
+    S=dict2obj(dict(Planet=Planet,
+                    Ringext=Ringe,
+                    Ringint=Ringi))
+    Es=transitArea(S)
+    Alow=Es[0]
+    #print "Scaled area = ",Alow
+    Alow*=Rlow**2
+    #print "Contained area = ",Alow
+
+    scaleFigure(Planet,Rlow/Rup)
+    scaleFigure(Ringe,Rlow/Rup)
+    scaleFigure(Ringi,Rlow/Rup)
+    #print "Scaled figures = ",Planet.a,Ringe.a,Ringi.a
+    S=dict2obj(dict(Planet=Planet,
+                    Ringext=Ringe,
+                    Ringint=Ringi))
+    Es=transitArea(S)
+    Aup=Es[0]
+    #print "Scaled area up = ",Aup
+    Aup*=Rup**2
+    #print "Contained area up = ",Aup
+
+    return Aup-Alow
+
+def areaStriping(S,ds):
+
+    #////////////////////////////////////////
+    #OBJECTS TO STRIP
+    #////////////////////////////////////////
+    Planet=copyObject(S.Planet)
+    Ringe=copyObject(S.Ringext)
+    Ringi=copyObject(S.Ringint)
+    S=dict2obj(dict(Planet=Planet,
+                    Ringext=Ringe,
+                    Ringint=Ringi))
+    
+    dp=1.0
+    Ap=0
+    As=[]
+    qlimb=False
+    i=1
+    for d in ds[1:]:
+        if d>1:
+            d=1.0
+            qlimb=True
+        fac=dp/d
+        scaleSystem(S,fac)
+        Es=transitArea(S)
+        At=Es[0]*d**2
+        As+=[At-Ap]
+        dp=d
+        Ap=At
+        if qlimb:break
+        i+=1
+
+    return array(As)
+
+def limbStriping(ds,c1,c2):
+    if ds[0]>1:
+        return [0],[]
+    deltad=ds[1]-ds[0]
+    ies=limbDarkeningNormalized(ds[:-1],c1,c2)
+    didrs=dlimbDarkeningNormalized(ds[:-1],c1,c2)
+    delds=1./3*(ies/abs(didrs))
+    deld=max(min(delds),deltad)
+    ds=secureArange(ds[0],min(ds[-1],1.0),deld)
+    return ds
+
+def secureArange(x1,x2,dx):
+    xs=arange(x1,x2,dx)
+    xs=concatenate((xs,[x2]))
+    return xs
