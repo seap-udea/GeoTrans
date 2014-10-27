@@ -42,6 +42,9 @@ def VERB(routine):print BARL,routine,RBAR
 #//////////////////////////////
 #NUMERICAL CONSTANTS
 #//////////////////////////////
+#LIMB SAMPLING POINTS
+NLIMBSAMPLING=8
+
 #MACHINE PRECISION
 ZERO=finfo(float).eps
 
@@ -1129,7 +1132,7 @@ def ringedPlanetArea(S):
 #//////////////////////////////
 #TRANSIT AREA
 #//////////////////////////////
-VERBLIMB=1
+VERBLIMB=0
 def transitArea(S):
     """
     Compute transit area of planet with its rings (Ringe, Ringi) over
@@ -1317,44 +1320,6 @@ def transitAreaTime(t,S):
     Es=transitArea(S)
     At=Es[0]
     return At
-
-def fluxLimbTime(t,Ar,S):
-    #UPDATE POSITION
-    updatePosition(S,t)
-    if VERBLIMB:print "\nTime: ",(t-S.tcen)/HOUR
-    if VERBLIMB:print "Center: ",S.Planet.C
-
-    #EXTREMES
-    dc,df=extremePointsMultiple((S.Planet,S.Ringext))
-    if VERBLIMB:print "Extremes:",dc,df
-    if dc>1:
-        if VERBLIMB:print "No transit."
-        return 1.0
-    
-    #LIMB STRIPING
-    deltad=(df-dc)/10.0
-    ds=secureArange(dc,min(1,df),deltad)
-    ds=limbStriping(ds,S.c1,S.c2)
-    if VERBLIMB:print "Sampling points: ",ds
-    if len(ds)==2 and df<1:
-        if VERBLIMB:print "Whole area."
-        Ats=[Ar]
-    else:
-        Ats=areaStriping(S,ds)
-    if VERBLIMB:
-        if len(array(Ats)[array(Ats)<0])>0:
-            print 2*TAB,"** NEGATIVE AREA **"
-    iss=limbDarkeningNormalized(ds[:-1],S.c1,S.c2)
-    if VERBLIMB:print "Areas: ",Ats
-    if VERBLIMB:print "**Check Area: ",array(Ats).sum()," (compared to :",Ar,")"
-    if VERBLIMB:print "Limb darkening: ",iss
-    #raw_input()
-    ifs=Ats*iss
-    iF=ifs.sum()
-    if VERBLIMB:print "Weighted area: ",ifs
-    if VERBLIMB:print "Residual flux: ",iF
-    #raw_input()
-    return 1-iF
 
 def transitAreaTimeFast(t,tcs,Ar,S):
     #ONLY COMPUTE AREA IF AT INGRESS OR EGRESS PHASE
@@ -1647,7 +1612,7 @@ def uniqueRoots(Es,F,xtol=1E-3):
         cluster=cluster[isort]
         #cluster[-1,2]*=-1
         #if VERB:print "Sorted cluster: ",cluster
-
+        
         while len(cluster)>0:
             ilen=len(cluster)
             root=cluster[0,0]
@@ -1660,11 +1625,13 @@ def uniqueRoots(Es,F,xtol=1E-3):
             #if VERB:print "Cummulative roots = ",roots
             if ilen>1:
                 ies=array(range(ilen))
-                cond=droot*cluster[:,2]>0
+                cond=droot*cluster[:,2]>=0
                 ires=ies[cond]
             else:
                 #if VERB:print "Only one element."
                 ires=ilen*[0]
+            #print "uniquing...",cluster,ires,ilen
+            #raw_input()
 
             #if VERB:print "Common roots = ",ires
             if len(ires)==ilen:
@@ -1691,6 +1658,10 @@ def ellipseDistanceDerivative(s,F,sgn):
 def extremePoint(Ellipse,sgn=-1):
     C=array(Ellipse.C)
 
+    #IF ORIGIN IS INSIDE ELLIPSE
+    if sgn==-1 and pointInFigure(Ellipse,toPoint(AR(0,0)))>0:
+        return 0.0
+
     #IF ELLIPSE IS A CIRCLE
     if EQUAL(Ellipse.a,Ellipse.b):
         return MAG(C)+sgn*Ellipse.a
@@ -1709,30 +1680,41 @@ def extremePoint(Ellipse,sgn=-1):
 
 def extremePoints(Ellipse):
     C=array(Ellipse.C)
+    qin=False
+    
+    if pointInFigure(Ellipse,toPoint(AR(0,0)))>0:
+        dc=0.0
+        qin=True
 
     #IF ELLIPSE IS A CIRCLE
     if EQUAL(Ellipse.a,Ellipse.b):
-        return MAG(C)-Ellipse.a,MAG(C)+Ellipse.a
+        if qin:
+            df=MAG(C)+Ellipse.a
+        else:
+            dc=MAG(C)-Ellipse.a
+            df=MAG(C)+Ellipse.a
 
-    #IF AN ELLIPSE
-    Ellipse.C=abs(rotTrans(Ellipse.C,
-                           +Ellipse.cost,
-                           -Ellipse.sint,
-                           AR(0,0)))
-
-    #CLOSEST
-    sE=brentq(ellipseDistanceDerivative,0,CLOSEST,
-              args=(Ellipse,CLOSEST),xtol=DISTANCETOL)
-    cE=CLOSEST*(1-sE**2)**0.5
-    dc=MAG(ellipsePointEcc(Ellipse,cE,sE))
-
-    #FARTHEST
-    sE=brentq(ellipseDistanceDerivative,0,FARTHEST,
-              args=(Ellipse,FARTHEST),xtol=DISTANCETOL)
-    cE=FARTHEST*(1-sE**2)**0.5
-    df=MAG(ellipsePointEcc(Ellipse,cE,sE))
-
-    Ellipse.C=array(C)
+    else:
+        Ellipse.C=abs(rotTrans(Ellipse.C,
+                               +Ellipse.cost,
+                               -Ellipse.sint,
+                               AR(0,0)))
+        
+        #CLOSEST
+        if not qin:
+            sE=brentq(ellipseDistanceDerivative,0,CLOSEST,
+                      args=(Ellipse,CLOSEST),xtol=DISTANCETOL)
+            cE=CLOSEST*(1-sE**2)**0.5
+            dc=MAG(ellipsePointEcc(Ellipse,cE,sE))
+        
+        #FARTHEST
+        sE=brentq(ellipseDistanceDerivative,0,FARTHEST,
+                  args=(Ellipse,FARTHEST),xtol=DISTANCETOL)
+        cE=FARTHEST*(1-sE**2)**0.5
+        df=MAG(ellipsePointEcc(Ellipse,cE,sE))
+        
+        Ellipse.C=array(C)
+        
     return dc,df
 
 def extremePointMultiple(Figures,sgn=-1):
@@ -2250,7 +2232,7 @@ def areaStriping(S,ds):
     As=[]
     qlimb=False
     i=1
-    for d in ds[1:]:
+    for d in ds[1:-1]:
         if d>1:
             d=1.0
             qlimb=True
@@ -2264,15 +2246,110 @@ def areaStriping(S,ds):
         if qlimb:break
         i+=1
 
+    d=ds[-1]
+    fac=dp/d
+    scaleSystem(S,fac)
+    if d==1:
+        Es=transitArea(S)
+        At=Es[0]*d**2
+    else:
+        At=ringedPlanetArea(S)*d**2
+    As+=[At-Ap]
+
+    return array(As)
+
+def areaStriping(S,ds):
+
+    #////////////////////////////////////////
+    #OBJECTS TO STRIP
+    #////////////////////////////////////////
+    Planet=copyObject(S.Planet)
+    Ringe=copyObject(S.Ringext)
+    Ringi=copyObject(S.Ringint)
+    S=dict2obj(dict(Planet=Planet,
+                    Ringext=Ringe,
+                    Ringint=Ringi))
+    
+    dp=1.0
+    Ap=0
+    As=[]
+    qlimb=False
+    i=1
+    for d in ds[1:-1]:
+        if d>1:
+            d=1.0
+            qlimb=True
+        fac=dp/d
+        scaleSystem(S,fac)
+        Es=transitArea(S)
+        At=Es[0]*d**2
+        As+=[At-Ap]
+        dp=d
+        Ap=At
+        if qlimb:break
+        i+=1
+
+    d=ds[-1]
+    fac=dp/d
+    scaleSystem(S,fac)
+    if d==1:
+        Es=transitArea(S)
+        At=Es[0]*d**2
+    else:
+        At=ringedPlanetArea(S)*d**2
+    As+=[At-Ap]
+
+    return array(As)
+
+def areaOblateStriping(S,ds):
+
+    #////////////////////////////////////////
+    #OBJECTS TO STRIP
+    #////////////////////////////////////////
+    Planet=copyObject(S.Planet)
+    Ringe=copyObject(S.Ringext)
+    Ringi=copyObject(S.Ringint)
+    S=dict2obj(dict(Planet=Planet,
+                    Ringext=Ringe,
+                    Ringint=Ringi))
+    
+    dp=1.0
+    Ap=0
+    As=[]
+    qlimb=False
+    i=1
+    for d in ds[1:-1]:
+        if d>1:
+            d=1.0
+            qlimb=True
+        fac=dp/d
+        scaleSystem(S,fac)
+        Es=transitAreaOblate(S)
+        At=Es[0]*d**2
+        As+=[At-Ap]
+        dp=d
+        Ap=At
+        if qlimb:break
+        i+=1
+
+    d=ds[-1]
+    fac=dp/d
+    scaleSystem(S,fac)
+    if d==1:
+        Es=transitAreaOblate(S)
+        At=Es[0]*d**2
+    else:
+        At=FIGUREAREA(S.Planet)*d**2
+    As+=[At-Ap]
+
     return array(As)
 
 def limbStriping(ds,c1,c2):
-    if ds[0]>1:
-        return [0],[]
+    if ds[0]>1:return [0],[]
     deltad=ds[1]-ds[0]
     ies=limbDarkeningNormalized(ds[:-1],c1,c2)
     didrs=dlimbDarkeningNormalized(ds[:-1],c1,c2)
-    delds=1./3*(ies/abs(didrs))
+    delds=1./7*(ies/abs(didrs))
     deld=max(min(delds),deltad)
     ds=secureArange(ds[0],min(ds[-1],1.0),deld)
     return ds
@@ -2281,3 +2358,44 @@ def secureArange(x1,x2,dx):
     xs=arange(x1,x2,dx)
     xs=concatenate((xs,[x2]))
     return xs
+
+def fluxLimbTime(t,Ar,S,areas=areaStriping):
+    #UPDATE POSITION
+    updatePosition(S,t)
+    if VERBLIMB:print "\nTime: ",(t-S.tcen)/HOUR
+    if VERBLIMB:print "Center: ",S.Planet.C
+
+    #EXTREMES
+    dc,df=extremePointsMultiple((S.Planet,S.Ringext))
+    if VERBLIMB:print "Extremes:",dc,df
+    if dc>1:
+        if VERBLIMB:print "No transit."
+        return 1.0
+    
+    #LIMB STRIPING
+    deltad=(df-dc)/NLIMBSAMPLING
+    ds=secureArange(dc,min(1,df),deltad)
+    #ds=limbStriping(ds,S.c1,S.c2)
+    if VERBLIMB:print "Sampling points: ",ds
+    if len(ds)==2 and df<1:
+        if VERBLIMB:print "Whole area, t = %e"%((t-S.tcen)/HOUR)
+        ds=array([ds[0],0.5*(ds[0]+ds[1]),ds[1]])
+        #Ats=[Ar]
+    #else:
+    Ats=areas(S,ds)
+    if VERBLIMB:
+        if len(array(Ats)[array(Ats)<0])>0:
+            print 2*TAB,"** NEGATIVE AREA **"
+    dss=0.5*(ds[:-1]+ds[1:])
+    iss=limbDarkeningNormalized(dss,S.c1,S.c2)
+    if VERBLIMB:print "Areas: ",Ats
+    if VERBLIMB:print "**Check Area: ",array(Ats).sum()," (compared to :",Ar,")"
+    if VERBLIMB:print "Limb darkening: ",iss
+    #raw_input()
+    ifs=Ats*iss
+    iF=ifs.sum()
+    if VERBLIMB:print "Weighted area: ",ifs
+    if VERBLIMB:print "Residual flux: ",iF
+    #raw_input()
+    return 1-iF
+
