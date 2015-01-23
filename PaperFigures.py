@@ -1031,7 +1031,7 @@ def transitDepthPosterior():
     """
     S=System
 
-    Nplanets=2
+    Nplanets=5000
     Nsamples=5
 
     Nbins=30
