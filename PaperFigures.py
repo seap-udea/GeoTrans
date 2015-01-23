@@ -1122,6 +1122,7 @@ def transitDepthPosterior():
             Aa=analyticalTransitAreaSystem(S)
             S.r=sqrt(Aa/Ap)
 
+            """
             #Z-AXIS: 
             #print dot(S.Mrs,[0,0,1])
 
@@ -1143,7 +1144,8 @@ def transitDepthPosterior():
             ax.set_ylim((ymin,ymax))
             ax.grid()
             fig.savefig("tmp/systems/system-%d.png"%i)
-
+            """
+            
             #========================================
             #SAVE DERIVATIVE QUANTITIES
             #========================================
