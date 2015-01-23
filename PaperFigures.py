@@ -1427,12 +1427,12 @@ def photoRingPosterior():
     """
     S=System
 
-    Nplanets=2
-    Nsamples=5
+    NplanetsPR=2
+    NsamplesPR=5
 
     Nbins=30
 
-    Ntotal=Nplanets*Nsamples
+    Ntotal=NplanetsPR*NsamplesPR
 
     PARAMETERS["iorb"][DEF]=0.0
     #PARAMETERS["ir"][DEF]=0.98
@@ -1469,9 +1469,9 @@ def photoRingPosterior():
         npar=i-1
 
         line=[]
-        for i in xrange(Nplanets*Nsamples):
-            if (i%Nplanets)==0:
-                print "Sample %d: %d planets generated..."%(i/Nplanets,i)
+        for i in xrange(NplanetsPR*NsamplesPR):
+            if (i%NplanetsPR)==0:
+                print "Sample %d: %d planets generated..."%(i/NplanetsPR,i)
             data=[i]
 
             #========================================
@@ -1546,7 +1546,7 @@ def photoRingPosterior():
     #########################################
     #STATISTICS
     #########################################
-    xs,hs,dhs=histPosterior(PRs,Nsamples,nbins=Nbins,
+    xs,hs,dhs=histPosterior(PRs,NsamplesPR,nbins=Nbins,
                                normed=True)
 
     #########################################
