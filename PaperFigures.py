@@ -1541,12 +1541,12 @@ def photoRingPosterior():
                       header,line,fmt="%+.8e")
     
     data=loadtxt("posterior-PhotoRing.dat")
-    rs=data[:,4]
+    PRs=data[:,5]
 
     #########################################
     #STATISTICS
     #########################################
-    xs,hs,dhs=histPosterior(rs,Nsamples,nbins=Nbins,
+    xs,hs,dhs=histPosterior(PRs,Nsamples,nbins=Nbins,
                                normed=True)
 
     #########################################
