@@ -12,6 +12,8 @@ from sys import argv,exit
 from os import system
 from numpy import *
 from lmfit import minimize,Parameters,Parameter,report_fit
+import commands
+from os import system
 
 ###################################################
 #MACROS
@@ -1411,31 +1413,34 @@ def transitAreaOblateTimeFast(t,tcs,Ar,S):
     else:At=0
     return At
 
-def contactFunction(t,S,sgn):
+def contactFunction(t,S,sgn,verbose=False):
     updatePosition(S,t)
     d=extremePointMultiple((S.Planet,
-                            S.Ringext,
-                            S.Ringint),
+                            S.Ringext),
                            sgn=sgn)
     return d-1
 
 def contactTime(S,Phase=EGRESS,Side=OUTSIDE,
-                tola=1E-3,tolx=0.0,maxfun=10):
+                tola=1E-3,tolx=0.0,maxfun=10,
+                verbose=False):
     """
     Calculate contact time for system S
     """
     tmin=S.tcen+(Phase-1)*S.dtstar
     tmax=S.tcen+(Phase+1)*S.dtstar
-    t=brentq(contactFunction,tmin,tmax,args=(S,Side))
+    t=brentq(contactFunction,tmin,tmax,
+             args=(S,Side,verbose))
     return t
 
-def contactTimes(S):
+def contactTimes(S,verbose=False):
     """
     Calculate contact times for system S
     """
     #CALCULATE EXTREME TIMES
-    t1=contactTime(S,Phase=INGRESS,Side=OUTSIDE)
-    t4=contactTime(S,Phase=EGRESS,Side=OUTSIDE)
+    t1=contactTime(S,Phase=INGRESS,Side=OUTSIDE,
+                   verbose=verbose)
+    t4=contactTime(S,Phase=EGRESS,Side=OUTSIDE,
+                   verbose=verbose)
 
     #CHECK GRAZING TRANSIT
     if S.grazing:
@@ -1454,8 +1459,13 @@ def transitAreaMontecarlo(Planet,Ringe,Ringi,NP=1E3):
 
     mA1,dA1,xs1,ys1=montecarloArea([Star,Ringe,Planet,Ringi],
                                    [+1,+1,-1,-1],Npoints=NP)
+    print 2*TAB,"Montecarlo Ringed Area: %.17e"%(mA1)
     mA2,dA2,xs2,ys2=montecarloArea([Star,Planet],
                                    [+1,+1],Npoints=NP)
+    print 2*TAB,"Montecarlo Planet Area: %.17e"%(mA2)
+    #xs2=[];ys2=[]
+    #xs1=[];ys1=[]
+
     mA=mA1+mA2
     dA=sqrt(dA1**2+dA2**2)
     if dA>0:
@@ -1678,6 +1688,29 @@ def extremePoint(Ellipse,sgn=-1):
     Ellipse.C=array(C)
     return d
 
+def extremePoint2(Ellipse,sgn=-1):
+    C=array(Ellipse.C)
+
+    #IF ORIGIN IS INSIDE ELLIPSE
+    if sgn==-1 and pointInFigure(Ellipse,toPoint(AR(0,0)))>0:
+        return 0.0
+
+    #IF ELLIPSE IS A CIRCLE
+    if EQUAL(Ellipse.a,Ellipse.b):
+        return MAG(C)+sgn*Ellipse.a
+
+    #IF AN ELLIPSE
+    Ellipse.C=abs(rotTrans(Ellipse.C,
+                           +Ellipse.cost,
+                           -Ellipse.sint,
+                           AR(0,0)))
+    sE=brentq(ellipseDistanceDerivative,0,sgn,
+              args=(Ellipse,sgn),xtol=DISTANCETOL)
+    cE=sgn*(1-sE**2)**0.5
+    d=MAG(ellipsePointEcc(Ellipse,cE,sE))
+    Ellipse.C=array(C)
+    return d,sE,cE
+
 def extremePoints(Ellipse):
     C=array(Ellipse.C)
     qin=False
@@ -1899,6 +1932,10 @@ def derivedSystemProperties(S):
     S.Rp=S.Rplanet/S.Rstar
     S.Ri=S.fi*S.Rp
     S.Re=S.fe*S.Rp
+
+    #STAR
+    S.Rstar=RSUN*(S.Mstar/MSUN)**0.8
+    S.Lstar=LSUN*(S.Mstar/MSUN)**3.5
 
     #ORBIT
     S.Porb=2*pi*sqrt(S.ap**3/(GCONST*(S.Mstar+S.Mplanet)))
@@ -2399,3 +2436,123 @@ def fluxLimbTime(t,Ar,S,areas=areaStriping):
     #raw_input()
     return 1-iF
 
+def histPosterior(xs,Nsamples,nbins=5,**args):
+    Ntotal=len(xs)
+    Npoints=Ntotal/Nsamples
+    HS=zeros((nbins,Nsamples))
+    xmin=min(xs)
+    xmax=max(xs)
+    dx=(xmax-xmin)/nbins
+    bins=arange(xmin,xmax+dx,dx)
+    for i in xrange(Nsamples):
+        j=i*Npoints
+        points=xs[j:j+Npoints]
+        hs,bs=histogram(points,bins=bins,**args)
+        HS[:,i]=transpose(hs)
+    hs=HS.mean(axis=1)
+    dhs=(HS.max(axis=1)-HS.min(axis=1))/2
+    return bs,hs,dhs
+
+def histPlot(ax,xs,hs,dhs,error=True,
+             color='b',alpha=0.3,**args):
+
+    for i in xrange(len(xs)-1):
+        xfs=[xs[i],xs[i],xs[i+1],xs[i+1]]
+        xms=0.5*(xs[i]+xs[i+1])
+        yfs=[0,hs[i],hs[i],0]
+        ax.plot(xfs,yfs,color=color,**args)
+        ax.fill_between(xfs,zeros_like(xfs),yfs,
+                        color=color,alpha=alpha,**args)
+        if error:
+            ax.errorbar(xms,hs[i],yerr=dhs[i],color=color)
+    ymin,ymax=ax.get_ylim()
+    ax.set_ylim((0,ymax))
+
+def transitFunction(f,i):
+    """
+    f: Number of times ring is larger than planet
+    i: Projected inclination in radians
+    """
+    fi=f*cos(i)
+    if fi>1:
+        T=f**2*cos(i)-1.0
+    else:
+        t1=2/pi*arcsin(1/(f*sin(i))*sqrt(f**2-1))
+        t2=2/pi*arcsin(cos(i)/(sin(i))*sqrt(f**2-1))
+        T=f**2*cos(i)*t1-t2
+            
+    return T
+
+def analyticalTransitArea(Rp,beta,fi,fe,i):
+    """
+    beta must be included in both because of consistency
+    """
+    A=pi*Rp**2*(1+beta*transitFunction(fe,i)-\
+                    beta*transitFunction(fi,i))
+    return A
+
+def plotPlanets(ax,S,Nx=5,Ny=5,
+                xmin=0.0,scalex=1.0,ymin=0,scaley=90,
+                yoffset=0,
+                fh=0,fv=0):
+    if Nx>2:
+        dc=scalex/(Nx-1)
+        cieffs=arange(xmin,xmin+scalex+dc,dc)
+    else:
+        cieffs=array([xmin])
+    if Ny>2:
+        dt=scaley/(Ny-1)
+        teffs=arange(ymin,ymin+scaley+dt,dt)*DEG
+    else:
+        teffs=array([ymin])
+
+    if fh==0:
+        fh=0.03/S.Rp
+    if fv==0:
+        fv=fh
+
+    for cieff in cieffs:
+        ieff=arccos(cieff)
+        for teff in teffs:
+            x=(cieff-xmin)/scalex
+            y=(teff*RAD-ymin)/scaley+yoffset
+            C=AR(x,y)
+            Planet=Figure(C,fh*S.Rp,fv*S.Rp,1.0,0.0,'Planet')
+            Ringe=Figure(C,fh*S.Re,fv*S.Re*cos(ieff),cos(teff),sin(teff),'Ringext')
+            Ringi=Figure(C,fh*S.Ri,fv*S.Ri*cos(ieff),cos(teff),sin(teff),'Ringint')
+            plotEllipse(ax,Planet,patch=True,zorder=10,color='k',transform=ax.transAxes)
+            plotEllipse(ax,Ringe,zorder=10,color='k',transform=ax.transAxes)
+            plotEllipse(ax,Ringi,zorder=10,color='k',transform=ax.transAxes)
+
+def blockFactor(tau,i):
+    ci=cos(i)
+    if abs(ci)<1E-15:block=1.0
+    else:
+        block=1-exp(-tau/ci)
+    return block
+
+def shell_exec(cmd,out=True):
+    """
+    Execute a command
+    """
+    if not out:
+        system(cmd)
+        output=""
+    else:
+        output=commands.getoutput(cmd)
+    return output
+
+def savetxtheader(filename,header,data,**args):
+    savetxt("/tmp/content",data,**args)
+    fh=open("/tmp/header","w")
+    fh.write(header)
+    fh.close()
+    shell_exec("cat /tmp/header /tmp/content > %s"%filename)
+
+def analyticalTransitAreaSystem(S):
+    """
+    beta must be included in both because of consistency
+    """
+    A=pi*S.Rp**2*(1+S.block*transitFunction(S.fe,S.ieff)-\
+                      S.block*transitFunction(S.fi,S.ieff))
+    return A
