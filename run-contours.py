@@ -8,6 +8,8 @@ print BARL,"Creating Transit Parameters Contours",RBAR
 S=System
 NotRinged=copyObject(S)
 NotRinged.Ringext.b=NotRinged.Ringint.b=0.0
+print "ieff,teff = ",S.ieff*RAD,S.teff*RAD
+
 
 #########################################
 #CONTACT TIMESCALES

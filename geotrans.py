@@ -2652,7 +2652,7 @@ def softArraySG(y,frac=5,nP=7,deriv=0, rate=1):
     y = np.concatenate((firstvals, y, lastvals))
     return np.convolve( m[::-1], y, mode='valid')
 
-def rhoObserved_Seager(Rp,Rstar,tT,tF,P):
+def rhoObserved_Seager(p,Rstar,tT,tF,P):
     """
     Rp: Planetary radius in star units
     Rstar: Stellar radius in SI
@@ -2662,15 +2662,13 @@ def rhoObserved_Seager(Rp,Rstar,tT,tF,P):
 
     Approximate formula by Seager & Mallen-Ornellas (2003)
     """
-    b=(((1-Rp)**2-(tF/tT)**2*(1+Rp)**2)/(1-(tF/tT)**2))**0.5
-    a=2*(P*HOUR)/pi*Rp**0.5/((tT*HOUR)**2-(tF*HOUR)**2)**0.5
-
+    a=2*(P*HOUR)/pi*p**0.25/((tT*HOUR)**2-(tF*HOUR)**2)**0.5
     rho=3*pi*a**3/(GCONST*(P*HOUR)**2)
     return rho
 
-def rhoObserved_Kipping(Rp,Rstar,tT,tF,P):
+def rhoObserved_Kipping(p,Rstar,tT,tF,P):
     """
-    Rp: Planetary radius in star units
+    p: Observed planetary radius in star units
     Rstar: Stellar radius in SI
     tT: Total transit duration (in hours)
     tF: Duration of full transit (in hours)
@@ -2680,7 +2678,7 @@ def rhoObserved_Kipping(Rp,Rstar,tT,tF,P):
     """
     sfF=(sin(tF*pi/P))**2
     sfT=(sin(tT*pi/P))**2
-
+    Rp=sqrt(p)
     b=(((1-Rp)**2-(sfF/sfT)*(1+Rp)**2)/(1-sfF/sfT))**0.5
     a=(((1+Rp)**2-b**2*(1-sfT))/sfT)**0.5
 

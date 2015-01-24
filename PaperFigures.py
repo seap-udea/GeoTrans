@@ -136,6 +136,13 @@ PROPERTIES=dict(
        "1",
        SHOW],
 
+    p=[0,
+       0,
+       0,
+       IDENT,
+       "1",
+       SHOW],
+
     PR=[0,
         0,
         0,
@@ -1226,7 +1233,6 @@ def contourPhotoRing():
     ip=Ringed.iorb
     B=RingedC.Borb
     Rp=RingedC.Rp
-    dp=S.Rp**2
     rho_true=S.Mstar/(4*pi/3*S.Rstar**3)
 
     #////////////////////////////////////////
@@ -1238,14 +1244,13 @@ def contourPhotoRing():
     teffmin=0.0*DEG
     teffmax=90.0*DEG
     Nteffs=30
+    qcorrected=False
 
     if qcalc:
-        #NOT-RINGED
-        Ap=pi*Rp**2
-
         cieffs=linspace(cieffmin,cieffmax,Ncieffs)
         teffs=linspace(teffmin,teffmax,Nteffs)
-
+        #cieffs=[0.5];teffs=[45*DEG]
+        
         IS,TS=meshgrid(cieffs,teffs)
         PR=zeros_like(IS)   
         PRN=zeros_like(IS)   
@@ -1258,6 +1263,9 @@ def contourPhotoRing():
             for t in teffs:
                 print TAB,"Testing teff = ",t*RAD
                 RingedC.ieff=i
+
+                RingedC.block=blockFactor(RingedC.tau,i)
+
                 RingedC.Ringext.b=RingedC.Ringext.a*cos(i)
                 RingedC.Ringext.cost=cos(t)
                 RingedC.Ringext.sint=sin(t)
@@ -1272,28 +1280,38 @@ def contourPhotoRing():
                 tcsp=contactTimes(RingedC)
                 tT=(tcsp[-1]-tcsp[1])/HOUR
                 tF=(tcsp[-2]-tcsp[2])/HOUR
-                pRn=rhoObserved_Seager(RingedC.Rp,
+
+                p=ringedPlanetArea(RingedC)/pi
+                pRn=rhoObserved_Seager(p,
                                        RingedC.Rstar,
                                        tT,tF,
                                        P)/rho_true
 
                 #ANALYTICAL
                 xpa1=transitPosition(RingedC.Rp,RingedC.fe,i,t,B,
-                                     direction=-1,sign=-1,qcorrected=True)
+                                     direction=-1,sign=-1,
+                                     qcorrected=qcorrected)
                 xpa2=transitPosition(RingedC.Rp,RingedC.fe,i,t,B,
-                                     direction=-1,sign=+1,qcorrected=True)
+                                     direction=-1,sign=+1,
+                                     qcorrected=qcorrected)
                 xpa3=transitPosition(RingedC.Rp,RingedC.fe,i,t,B,
-                                     direction=+1,sign=-1,qcorrected=True)
+                                     direction=+1,sign=-1,
+                                     qcorrected=qcorrected)
                 xpa4=transitPosition(RingedC.Rp,RingedC.fe,i,t,B,
-                                     direction=+1,sign=+1,qcorrected=True)
+                                     direction=+1,sign=+1,
+                                     qcorrected=qcorrected)
                 tT=P*arcsin((xpa4-xpa1)/(ap*sin(ip)))/(2*pi)
                 tF=P*arcsin((xpa3-xpa2)/(ap*sin(ip)))/(2*pi)
-                pR=rhoObserved_Seager(RingedC.Rp,
+
+                p=analyticalTransitArea(RingedC.Rp,RingedC.block,
+                                        RingedC.fi,RingedC.fe,
+                                        i)/pi
+                pR=rhoObserved_Seager(p,
                                       RingedC.Rstar,
                                       tT,tF,
                                       P)/rho_true
 
-                print 2*TAB,"PR (Numerical) = %.6e, PR (Analytical) = %.6e"%(pRn,pR)
+                print 2*TAB,"PR (Numerical) = %.6e, PR (Analytical) = %.6e"%(log10(pRn),log10(pR))
 
                 PR[ii,jj]=log10(pR)
                 PRN[ii,jj]=log10(pRn)
@@ -1328,11 +1346,11 @@ def contourPhotoRing():
 
     ax.set_xlabel(r"$\cos\,i$",fontsize=20)
     ax.set_ylabel(r"$\theta$",fontsize=20)
-    ax.set_title("Photo-Ring Effect (Numerical calculation)"%(B),position=(0.5,1.02),
+    ax.set_title("Photo-Ring Effect"%(B),position=(0.5,1.02),
                  fontsize=14)
 
     cbar=fig.colorbar(c)
-    cbar.ax.set_ylabel(r"$\log(\rho_{\rm obs}/\rho_\star)$",fontsize=14)
+    cbar.ax.set_ylabel(r"$\log(\rho_{\rm obs}/\rho_\star)$",fontsize=16)
     yts=cbar.ax.get_yticks()
     yl=[]
     levels=[]
@@ -1345,6 +1363,11 @@ def contourPhotoRing():
                levels=levels,
                colors=['k'],linestyles=[':'])
     ax.clabel(c,inline=1,fontsize=10)
+    levelsC=levels
+
+    ax.contour(IS,TS*RAD,transpose(PRN),
+               levels=[0.0],
+               colors=['k'],linestyles=['-'],linewidths=['2'])
     
     plotPlanets(ax,RingedC,
                 xmin=cieffmin,
@@ -1384,10 +1407,15 @@ def contourPhotoRing():
         yl+=["%.3f"%((dmin+yt*(dmax-dmin))*1E0)]
         levels+=[yv]
     cbar.ax.set_yticklabels(yl)
-    ax.contour(IS,TS*RAD,transpose(PR),
-               levels=levels,
-               colors=['k'],linestyles=[':'])
+    c=ax.contour(IS,TS*RAD,transpose(PR),
+                 levels=levelsC,
+                 colors=['k'],linestyles=[':'])
+    ax.clabel(c,inline=1,fontsize=10)
 
+    ax.contour(IS,TS*RAD,transpose(PR),
+               levels=[0.0],
+               colors=['k'],linestyles=['-'],linewidths=['2'])
+    
     plotPlanets(ax,RingedC,
                 xmin=cieffmin,
                 scalex=(cieffmax-cieffmin),
@@ -1427,7 +1455,7 @@ def photoRingPosterior():
     """
     S=System
 
-    NplanetsPR=2
+    NplanetsPR=10
     NsamplesPR=5
 
     Nbins=30
@@ -1517,10 +1545,14 @@ def photoRingPosterior():
             #COMPUTE
             #========================================
             rho_true=S.Mstar/(4*pi/3*S.Rstar**3)
+
             tcsp=contactTimes(S)
             tT=(tcsp[-1]-tcsp[1])/HOUR
             tF=(tcsp[-2]-tcsp[2])/HOUR
-            S.PR=rhoObserved_Seager(S.Rp,S.Rstar,
+            S.p=analyticalTransitArea(S.Rp,S.block,
+                                      S.fi,S.fe,
+                                      S.ieff)/pi
+            S.PR=rhoObserved_Seager(S.p,S.Rstar,
                                     tT,tF,S.Porb/HOUR)/rho_true
             S.logPR=log10(S.PR)
 
@@ -1557,9 +1589,10 @@ def photoRingPosterior():
     error=True
 
     xms=histPlot(ax,xs,hs,dhs,error=error,color='r',alpha=0.1)
-    hms=softArraySG(hs,frac=2,nP=3)
+    hms=hs
+    #hms=softArraySG(hs,frac=2,nP=3)
     ax.plot(xms,hms,'b-',linewidth=2,zorder=10)
-    ax.set_xlabel(r"$R_{\rm p,obs}/R_{\rm p}$",fontsize=14)
+    ax.set_xlabel(r"$\log\,{\rm PR}$",fontsize=14)
     ax.set_ylabel("Frequency",fontsize=12)
     ax.set_title(r"Observed Radius Posterior Distribution",
                  position=(0.5,1.02))
@@ -1592,7 +1625,7 @@ def testPhotoRing():
     P=Ringed.Porb/HOUR
     ip=Ringed.iorb
     rho_true=S.Mstar/(4*pi/3*S.Rstar**3)
-    dp=S.Rp**2
+
     print "True density = ",rho_true
     
     #========================================
@@ -1602,17 +1635,14 @@ def testPhotoRing():
     xm=sqrt((1-NotRinged.Rp)**2-NotRinged.Borb**2)
     tT=P*arcsin(2*xp/(ap*sin(ip)))/(2*pi)
     tF=P*arcsin(2*xm/(ap*sin(ip)))/(2*pi)
-    
-    aR_obs=2*S.Porb/pi*\
-        dp**0.25/((tT*HOUR)**2-(tF*HOUR)**2)**0.5
-    b_obs=(((1-sqrt(dp))**2-(tF/tT)**2*(1+sqrt(dp))**2)/\
-               (1-(tF/tT)**2))**0.5
-    rho_obs=3*pi*aR_obs**3/(GCONST*S.Porb**2) #Kipping, 2013
+    p=S.Rp**2
 
-    rho_obs=rhoObserved_Seager(S.Rp,S.Rstar,
+    print "t_T, t_F = ",tT,tF
+    rho_obs=rhoObserved_Seager(p,S.Rstar,
                                tT,tF,S.Porb/HOUR)
+
     print "Observed density (not ringed, Seager) = ",rho_obs
-    rho_obs=rhoObserved_Kipping(S.Rp,S.Rstar,
+    rho_obs=rhoObserved_Kipping(p,S.Rstar,
                                tT,tF,S.Porb/HOUR)
     print "Observed density (not ringed, Kipping) = ",rho_obs
 
@@ -1622,65 +1652,76 @@ def testPhotoRing():
     #MANUAL i,t
     
     #GOOD SPOT
-    i=53*DEG;t=80*DEG
+    i=60.0*DEG;t=80.0*DEG
 
-    #GOOD SPOT
-    i=10*DEG;t=80*DEG
-
-    i=89.427033*DEG;t=0*DEG
+    print "Orientation parameters (MANUAL):"
+    print TAB,"i = %.2f deg"%(i*RAD)
+    print TAB,"t = %.2f deg"%(t*RAD)
     
     RingedC.Ringext.b=RingedC.Ringext.a*cos(i)
     RingedC.Ringint.b=RingedC.Ringint.a*cos(i)
     RingedC.Ringext.cost=cos(t);RingedC.Ringext.sint=sin(t)
     RingedC.Ringint.cost=cos(t);RingedC.Ringint.sint=sin(t)
+    RingedC.block=blockFactor(RingedC.tau,i)
 
     #========================================
     #RINGED TRANSIT DURATION (NUMERICAL)
     #========================================
-    lw=1
+    print BARL,"NUMERICAL",RBAR
+
+    p=ringedPlanetArea(RingedC)/pi
 
     tcsp=contactTimes(RingedC)
     tT=(tcsp[-1]-tcsp[1])/HOUR
     tF=(tcsp[-2]-tcsp[2])/HOUR
 
-    rho_obs=rhoObserved_Kipping(S.Rp,S.Rstar,
+    rho_obs=rhoObserved_Seager(p,S.Rstar,
                                tT,tF,S.Porb/HOUR)
-    pR=rho_obs/rho_true
-    print "Observed density (ringed, numerical, Kipping) = ",rho_obs
+    pR=log10(rho_obs/rho_true)
+
+    print "p = ",p
+    print "t_T, t_F = ",tT,tF
+    print "Observed density (ringed, numerical, Seager) = ",rho_obs
     print "Photo-ring effect (numerical) = ",pR
 
     #========================================
     #RINGED TRANSIT ANALYTICAL 
     #========================================
+    print BARL,"ANALYTICAL",RBAR
+
+    p=analyticalTransitArea(RingedC.Rp,RingedC.block,
+                            RingedC.fi,RingedC.fe,
+                            i)/pi
+    
     a=RingedC.Ringext.a
     b=RingedC.Ringext.b
     B=RingedC.Borb
 
-    #C1
     xpa1=transitPosition(RingedC.Rp,RingedC.fe,i,t,B,
                          direction=-1,sign=-1,qcorrected=True)
-    #C2
     xpa2=transitPosition(RingedC.Rp,RingedC.fe,i,t,B,
                          direction=-1,sign=+1,qcorrected=True)
-    #C3
     xpa3=transitPosition(RingedC.Rp,RingedC.fe,i,t,B,
                          direction=+1,sign=-1,qcorrected=True)
-    #C4
     xpa4=transitPosition(RingedC.Rp,RingedC.fe,i,t,B,
                          direction=+1,sign=+1,qcorrected=True)
+
     taT=P*arcsin((xpa4-xpa1)/(ap*sin(ip)))/(2*pi)
     taF=P*arcsin((xpa3-xpa2)/(ap*sin(ip)))/(2*pi)
 
-    rho_obsa=rhoObserved_Kipping(S.Rp,S.Rstar,
-                                 taT,taF,S.Porb/HOUR)
-    pRa=rho_obsa/rho_true
-    print "Observed density (ringed, analytical, Kipping) = ",rho_obsa
+    rho_obsa=rhoObserved_Seager(p,S.Rstar,
+                                taT,taF,S.Porb/HOUR)
+    pRa=log10(rho_obsa/rho_true)
+
+    print "p = ",p
+    print "t_T, t_F = ",taT,taF
+    print "Observed density (ringed, analytical, Seager) = ",rho_obsa
     print "Photo-ring effect (analytical) = ",pRa
 
     #========================================
     #ERRORS
     #========================================
-    drho=abs(rho_obs-rho_obsa)/rho_obs*100
+    drho=abs(rho_obs-rho_obsa)/rho_true*100
     print "Error in observed density = %.2f%%"%(drho)
     dT=abs(tT-taT)/tT*100
     print "Error in total transit time = %.2f%%"%(dT)
