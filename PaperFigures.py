@@ -1554,6 +1554,7 @@ def photoRingPosterior():
                                       S.ieff)/pi
             S.PR=rhoObserved_Seager(S.p,S.Rstar,
                                     tT,tF,S.Porb/HOUR)/rho_true
+            
             S.logPR=log10(S.PR)
 
             #========================================
