@@ -984,9 +984,10 @@ def curveTransitDepths():
     #////////////////////////////////////////
     #CURVE
     #////////////////////////////////////////
-    fig=plt.figure(figsize=(8,8))
+    fig=plt.figure(figsize=(8,6))
     ax=fig.gca()
 
+    """
     tau=0.4
     Aas=[analyticalTransitArea(RingedC.Rp,blockFactor(tau,arccos(cieff)),
                                RingedC.fi,RingedC.fe,
@@ -1008,7 +1009,26 @@ def curveTransitDepths():
                                arccos(cieff)) for cieff in cieffs]
     rs=sqrt(array(Aas)/Ap)
     ax.plot(cieffs,rs,'-',label=r"$\tau=%.1f$"%tau)
+    """
+    Ntau=60
+    i=0
+    cmap=cm.spectral
+    for tau in logspace(log10(0.4),log10(4.0),Ntau):
+        Aas=[analyticalTransitArea(RingedC.Rp,blockFactor(tau,arccos(cieff)),
+                                   RingedC.fi,RingedC.fe,
+                                   arccos(cieff)) for cieff in cieffs]
+        rs=sqrt(array(Aas)/Ap)
+        ax.plot(cieffs,rs,'-',label=r"$\tau=%.1f$"%tau,
+                color=cmap((1.0*i)/Ntau))
 
+        if (i%10)==0:
+            ax.text(1.0,rs[-1],r"$\tau$=%.1f"%tau,
+                    horizontalalignment='left',
+                    verticalalignment='center',fontsize=10)
+        i+=1
+    ax.text(1.0,rs[-1],r"$\tau$=%.1f"%tau,
+            horizontalalignment='left',
+            verticalalignment='center',fontsize=10)
 
     ax.set_xlabel(r"$\cos\,i$",fontsize=16)
     ax.set_ylabel(r"$R_{\rm p,obs}/R_{\rm p}$",fontsize=16)
@@ -1020,7 +1040,7 @@ def curveTransitDepths():
     ax.set_xlim(cieffmin,cieffmax)
     ax.set_ylim(1.0,sqrt(RingedC.Ringext.a**2-RingedC.Ringint.a**2+Rp**2)/Rp)
 
-    ax.legend(loc="best")
+    #ax.legend(loc="best")
     ax.grid(which="both")
 
     fig.savefig("figures/TransitDepthCurve.png")
@@ -1054,7 +1074,7 @@ def transitDepthPosterior():
     """
     S=System
 
-    Nplanets=2
+    Nplanets=10
     Nsamples=5
 
     Nbins=30
@@ -1197,7 +1217,7 @@ def transitDepthPosterior():
     #########################################
     #HISTOGRAM
     #########################################
-    fig=plt.figure(figsize=(8,8))
+    fig=plt.figure(figsize=(8,6))
     ax=fig.gca()
     error=True
 
@@ -1222,7 +1242,7 @@ def contourPhotoRing():
     except:
         qcalc=1
 
-    print BARL,"Testing Analytical Times",RBAR
+    print BARL,"Calculating Photo-ring effect contours",RBAR
 
     #////////////////////////////////////////
     #SYSTEM
@@ -1328,6 +1348,7 @@ def contourPhotoRing():
     TS=loadtxt("TSP.dat")
     PR=loadtxt("PR.dat")
     PRN=loadtxt("PRN.dat")
+    data=loadtxt("posterior-PhotoRing-lowtilt.dat") #EXPERIMENT
     
     cmap=plt.get_cmap("rainbow")
 
@@ -1343,6 +1364,8 @@ def contourPhotoRing():
     levels=linspace(dmin,dmax,100)
     c=ax.contourf(IS,TS*RAD,transpose(PRN),
                   levels=levels,cmap=cmap)
+
+    ax.plot(cos(data[::5,4]*DEG),abs(data[::5,7]),'k+',zorder=5) #EXP
 
     ax.set_xlabel(r"$\cos\,i$",fontsize=20)
     ax.set_ylabel(r"$\theta$",fontsize=20)
@@ -1455,7 +1478,7 @@ def photoRingPosterior():
     """
     S=System
 
-    NplanetsPR=10
+    NplanetsPR=1000
     NsamplesPR=5
 
     Nbins=30
@@ -1585,19 +1608,24 @@ def photoRingPosterior():
     #########################################
     #HISTOGRAM
     #########################################
-    fig=plt.figure(figsize=(8,8))
+    fig=plt.figure(figsize=(8,6))
     ax=fig.gca()
     error=True
 
     xms=histPlot(ax,xs,hs,dhs,error=error,color='r',alpha=0.1)
     hms=hs
-    #hms=softArraySG(hs,frac=2,nP=3)
-    ax.plot(xms,hms,'b-',linewidth=2,zorder=10)
-    ax.set_xlabel(r"$\log\,{\rm PR}$",fontsize=14)
+    hms=softArraySG(hs,frac=6,nP=2)
+    
+    hfuncs=interpolant(xms,hms,kind='cubic')
+    xvec=linspace(xms[0],xms[-1],1000)
+    hvec=hfuncs(xvec)
+    ax.plot(xvec,hvec,'b-',linewidth=2,zorder=10)
+
+    ax.set_xlabel(r"$\log(\rho_{\rm obs}/\rho_\star)$",fontsize=14)
     ax.set_ylabel("Frequency",fontsize=12)
-    ax.set_title(r"Observed Radius Posterior Distribution",
+    ax.set_title(r"Photo-Ring Posterior Distribution",
                  position=(0.5,1.02))
-    ax.axvline(0.0,linewidth=2)
+    ax.axvline(0.0,color='k',linestyle='--',linewidth=2)
     ax.set_xlim((xs[0],xs[-1]))
     hmin,hmax=ax.get_ylim()
     ax.set_ylim((0.0,hmax))
@@ -1752,6 +1780,32 @@ def testPhotoRing():
     ax.grid()
     fig.savefig("figures/TestPhotoRing.png")
 
+def testFisherDistribution():
+
+    #AVERAGE AS A FUNCTION OF KAPPA
+    tstd=[]
+    ks=logspace(log10(0.1),log10(100),1000)
+    for k in ks:
+        thetas=randomFisher(kappa=k,nsample=10000)
+        tstd+=[std(thetas)*RAD]
+        
+    fig=plt.figure()
+    ax=fig.gca()
+    ax.plot(ks,tstd,'b+')
+    ax.set_xscale("log")
+    ax.grid(which='both')
+    ax.set_xlabel(r"$\kappa$",fontsize=20)
+    ax.set_ylabel(r"$\sigma_{\theta}$ (degrees)",fontsize=20)
+    ax.set_title("Fisher Distribution",position=(0.5,1.02))
+    fig.savefig("figures/FisherStd.png")
+    
+    thetas=randomFisher(kappa=10.0,nsample=1000)
+    mus=cos(thetas)
+    fig=plt.figure()
+    ax=fig.gca()
+    ax.hist(mus,bins=20)
+    fig.savefig("figures/Fisher.png")
+
 #testTransitDepth()
 #testTransitDuration()
 #errorTransitPositions()
@@ -1761,4 +1815,5 @@ def testPhotoRing():
 #transitDepthPosterior()
 #testPhotoRing()
 #contourPhotoRing()
-photoRingPosterior()
+#photoRingPosterior()
+testFisherDistribution()

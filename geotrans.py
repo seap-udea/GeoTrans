@@ -3,6 +3,7 @@
 ###################################################
 from matplotlib import pyplot as plt
 from matplotlib import patches as pat
+from matplotlib.pyplot import cm
 from cmath import sqrt as csqrt,phase
 from scipy import constants as const
 from scipy.optimize import newton,brentq,fsolve
@@ -2684,3 +2685,21 @@ def rhoObserved_Kipping(p,Rstar,tT,tF,P):
 
     rho=3*pi*a**3/(GCONST*(P*HOUR)**2)
     return rho
+
+def randomFisher(kappa=0.0,nsample=1):
+    """
+    Generate the polar angle of a vector following the Fisher
+    Distribution over a 3-sphere.
+
+    The azimuthal angles can be simply generated using uniform in the
+    interval [0,2 pi).
+
+    Source: "Statistical analysis of spherical data" by N. I. Fisher,
+    T. Lewis and B. J. J. Embleton.
+
+    kappa: concentration parameter.
+    """
+    lamb=exp(-2*kappa)
+    u=RAND(nsample)*(1-lamb)+lamb
+    thetas=2*arcsin(sqrt(-log(u)/(2*kappa)))
+    return thetas

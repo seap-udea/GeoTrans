@@ -40,7 +40,7 @@ fe=RSAT_ARING/RSAT, #Exterior ring (Rp)
 fi=RSAT_BRING/RSAT, #Interior ring (Rp)
 ir=10.0*DEG, #Ring inclination
 phir=60.0*DEG, #Ring roll angle
-tau=4.0, #Opacity
+tau=1.0, #Opacity
 ))
 
 #########################################
