@@ -12,7 +12,9 @@ from scipy.interpolate import interp1d as interpolant
 from sys import argv,exit
 from os import system
 from numpy import *
-from lmfit import minimize,Parameters,Parameter,report_fit
+try:
+    from lmfit import minimize,Parameters,Parameter,report_fit
+except:pass
 import commands
 from os import system
 
@@ -2703,3 +2705,37 @@ def randomFisher(kappa=0.0,nsample=1):
     u=RAND(nsample)*(1-lamb)+lamb
     thetas=2*arcsin(sqrt(-log(u)/(2*kappa)))
     return thetas
+
+def transitPosition(Rp,fe,i,t,B,direction=+1,sign=+1,qcorrected=False):
+    """
+    direction = +1 (out of disk), -1 (toward disk)
+    sign: -1 (before contact), +1 (after contact)
+    
+    Example:
+      Contact 1: direction=-1, sign=-1
+      Contact 2: direction=-1, sign=+1
+      Contact 3: direction=+1, sign=-1
+      Contact 4: direction=+1, sign=+1
+    """
+    a=fe*Rp
+    b=fe*Rp*cos(i)
+
+    if qcorrected:
+        if cos(i)>0.6:
+            xp=direction*sqrt((1+direction*sign*a)**2-B**2)
+            return xp
+
+    a=fe*Rp
+    b=fe*Rp*cos(i)
+
+    xp=direction*sqrt(1-a**2*(sin(t)-sign*B/a)**2*\
+                          (1-b**2/a))+\
+                          sign*a*cos(t)
+
+    #COMPARE WITH THE NOT-RINGED CASE
+    xpP=direction*sqrt((1+direction*sign*Rp)**2-B**2)
+    if sign<0:
+        if xpP<xp:xp=xpP
+    else:
+        if xpP>xp:xp=xpP
+    return xp
