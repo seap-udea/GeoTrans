@@ -15,7 +15,7 @@ from os import system
 from numpy import *
 try:from lmfit import minimize,Parameters,Parameter,report_fit
 except:pass
-import commands
+import subprocess
 from os import system
 
 ###################################################
@@ -42,7 +42,7 @@ GREATERTHAN=lambda x,y:(x-y)>ZERO
 LESSEQUAL=lambda x,y:(x-y)<=-ZERO
 GREATEREQUAL=lambda x,y:(x-y)>=ZERO
 DENSITY=lambda M,R:M/(4*pi/3*R**3)
-def VERB(routine):print BARL,routine,RBAR
+def VERB(routine):print(BARL,routine,RBAR)
 
 #//////////////////////////////
 #NUMERICAL CONSTANTS
@@ -91,7 +91,7 @@ VERBOSE[0]=0
 VERBOSE[1]=1
 VERBOSE[2]=1
 VERBOSE[3]=1
-for i in xrange(10):
+for i in range(10):
     if VERBOSE[i]==0:
         VERBOSE[i:]=[0]*(10-i)
         break
@@ -212,7 +212,7 @@ def copyObject(obj):
     """
     new=dict()
     dic=obj.__dict__
-    for key in dic.keys():
+    for key in list(dic.keys()):
         var=dic[key]
         new[key]=var
         try:
@@ -307,7 +307,7 @@ def roundComplex(zs):
     Round complex numbers zs to IMAGTOL tolerance
     **OPTIMIZE
     """
-    for i in xrange(len(zs)):
+    for i in range(len(zs)):
         if abs(zs[i].imag)<=IMAGTOL:zs[i]=real(zs[i])
     return zs
 
@@ -360,14 +360,14 @@ def ellipseCoefficients(F):
     v8=-2*x*(b2/a2)
     v10=-2*x*(b2/a2)
     if VERBOSE[3]:vs=array([v1,v2,v3,v4,v8,v10])
-    if VERBOSE[3]:print "Auxiliar variables: ",vs
+    if VERBOSE[3]:print("Auxiliar variables: ",vs)
     
     e=v2*v10-v4**2
     d=-2*v3*v4
     c=-v2*v8-v3**2-2*v1*v4
     b=-2*v1*v3
     a=-v1**2
-    if VERBOSE[3]:print "Coefficients: ",a,b,c,d,e
+    if VERBOSE[3]:print("Coefficients: ",a,b,c,d,e)
 
     return a,b,c,d,e
 
@@ -392,7 +392,7 @@ def thirdPolyRoot(a,b,c,d):
     xs+=[-1/(3*a)*(b+u2*C0+D0/(u2*C0))]
     xs+=[-1/(3*a)*(b+u3*C0+D0/(u3*C0))]
 
-    if VERBOSE[3]:print "Roots poly-3:",xs
+    if VERBOSE[3]:print("Roots poly-3:",xs)
     return array(xs)
 
 def fourthPolyRoots(a,b,c,d,e):
@@ -410,7 +410,7 @@ def fourthPolyRoots(a,b,c,d,e):
     a3=float(b)/a
     a4=1.0
     if VERBOSE[3]:
-        print "Polynomial (%f) x^4 + (%f) x^3 + (%f) x^2 + (%f) x + (%f) = 0"%(a4,a3,a2,a1,a0)
+        print("Polynomial (%f) x^4 + (%f) x^3 + (%f) x^2 + (%f) x + (%f) = 0"%(a4,a3,a2,a1,a0))
 
     #RELATED THIRD POLYNOMIAL
     a=1.0
@@ -419,14 +419,14 @@ def fourthPolyRoots(a,b,c,d,e):
     d=4*a2*a0-a1**2-a3**2*a0
     xs=thirdPolyRoot(a,b,c,d)
     xs=realArray(xs)
-    if VERBOSE[3]:print "Real roots poly-3= ",xs
+    if VERBOSE[3]:print("Real roots poly-3= ",xs)
 
     #CHOOSE REAL ROOTS
     Rs=array([csqrt(0.25*a3**2-a2+x) for x in xs])
 
-    if VERBOSE[3]:print "Auxiliar Rs = ",Rs
+    if VERBOSE[3]:print("Auxiliar Rs = ",Rs)
     Rs=roundComplex(Rs)
-    if VERBOSE[3]:print "Rounded Auxiliar Rs = ",Rs
+    if VERBOSE[3]:print("Rounded Auxiliar Rs = ",Rs)
     
     #SOLVE POLYNOMIAL
     Ds=[];Es=[]
@@ -434,11 +434,11 @@ def fourthPolyRoots(a,b,c,d,e):
     #**REMOVE THIS FOR LOOP
     for x,R in zip(xs,Rs):
         if abs(R)<IMAGTOL:
-            if VERBOSE[3]:print "Auxiliar R is effectively 0."
+            if VERBOSE[3]:print("Auxiliar R is effectively 0.")
             Ds+=[csqrt(0.75*a3**2-2*a2+2*csqrt(x**2-4*a0))]
             Es+=[csqrt(0.75*a3**2-2*a2-2*csqrt(x**2-4*a0))]
         else:
-            if VERBOSE[3]:print "Auxiliar R is effectively different from 0."
+            if VERBOSE[3]:print("Auxiliar R is effectively different from 0.")
             Ds+=[csqrt(0.75*a3**2-R**2-2*a2+0.25*(4*a3*a2-8*a1-a3**3)/R)]
             Es+=[csqrt(0.75*a3**2-R**2-2*a2-0.25*(4*a3*a2-8*a1-a3**3)/R)]
     Ds=array(Ds);Es=array(Es)
@@ -448,8 +448,8 @@ def fourthPolyRoots(a,b,c,d,e):
     z3s=-0.25*a3-0.5*Rs+0.5*Es
     z4s=-0.25*a3-0.5*Rs-0.5*Es
 
-    zs=array(zip(z1s,z2s,z3s,z4s))
-    if VERBOSE[3]:print "Root sets poly-4: ",zs
+    zs=array(list(zip(z1s,z2s,z3s,z4s)))
+    if VERBOSE[3]:print("Root sets poly-4: ",zs)
 
     return zs
 
@@ -557,7 +557,7 @@ def eIcAnalytical(F1,F2):
 
     #NON-CONCENTRIC ELLIPSE AND UNITARY CIRCLE (F1<F2)
     if VERBOSE[3]:VERB("eIc")
-    if VERBOSE[3]:print "Figures: ",F1,F2
+    if VERBOSE[3]:print("Figures: ",F1,F2)
     
     C=F1.C
     x=C[0]
@@ -565,11 +565,11 @@ def eIcAnalytical(F1,F2):
     a=F1.a
     b=F1.b
     qin=sign(pointInFigure(F2,toPoint(C)))
-    if VERBOSE[3]:print "qin = ",qin
+    if VERBOSE[3]:print("qin = ",qin)
 
     #CHECK IF ELLIPSE F1 IS A CIRCLE 
     if EQUAL(a,b):
-        if VERBOSE[3]:print "Ellipse is a Circle."
+        if VERBOSE[3]:print("Ellipse is a Circle.")
         return cIc(F1,F2)
 
     #GET THE ELLIPSE COEFFICIENTS
@@ -578,9 +578,9 @@ def eIcAnalytical(F1,F2):
     #SOLVE THE CORRESPONDING FOURTH ORDER EQUATION
     ys=fourthPolyRoots(ac,bc,cc,dc,ec)
     ys=realArray(ys)
-    if VERBOSE[3]:print "Intersetion in y (Real) = ",ys
+    if VERBOSE[3]:print("Intersetion in y (Real) = ",ys)
     ys=ys[abs(ys)<1]
-    if VERBOSE[3]:print "Intersection in y (In range) = ",ys
+    if VERBOSE[3]:print("Intersection in y (In range) = ",ys)
     #IF NO SOLUTION, NO INTERSECTION
     if len(ys)==0:
         return \
@@ -598,7 +598,7 @@ def eIcAnalytical(F1,F2):
         beta1=-2*x/a**2
         beta2=1/a**2
         det=(alpha1*beta2-alpha2*beta1)
-        if VERBOSE[3]:print "Determinant: ",det
+        if VERBOSE[3]:print("Determinant: ",det)
         if abs(det)>=1E-13:
             for yp in ys:
                 alpha0=yp**2-1
@@ -607,11 +607,11 @@ def eIcAnalytical(F1,F2):
             xs=array(xs)
         else:qtrad=1
     except ValueError as error:
-        if VERBOSE[3]:print "Error:",error
+        if VERBOSE[3]:print("Error:",error)
         qtrad=2
 
     if qtrad:
-        if VERBOSE[3]:print "Using traditional formula for x (reason = %d)"%qtrad
+        if VERBOSE[3]:print("Using traditional formula for x (reason = %d)"%qtrad)
         xs=[]
         #**OPTIMIZE
         for y in ys:
@@ -619,7 +619,7 @@ def eIcAnalytical(F1,F2):
             xs+=[x,-x]
         xs=array(xs)
         
-    if VERBOSE[3]:print "Intersection in x (qtrad = %d) = "%qtrad,xs
+    if VERBOSE[3]:print("Intersection in x (qtrad = %d) = "%qtrad,xs)
 
     #CHOOSE THE ACTUAL SOLUTION
     lys=len(ys)
@@ -628,9 +628,9 @@ def eIcAnalytical(F1,F2):
         qps=[]
         i=0
         for x,y in zip(xs,ys):
-            if VERBOSE[3]:print "Testing couple: ",x,y
+            if VERBOSE[3]:print("Testing couple: ",x,y)
             qps+=[pointInFigure(F1,toPoint(AR(x,y)))]
-            if VERBOSE[3]:print "Value: ",qps[i]
+            if VERBOSE[3]:print("Value: ",qps[i])
             i+=1
 
         #GET THE POINTS CLOSER TO THE FIGURE
@@ -663,7 +663,7 @@ def eIcAnalytical(F1,F2):
             Point(AR(-123,-123),F1,F2),\
             Point(AR(-123,-123),F1,F2)
     
-    if VERBOSE[3]:print "Points (%d): "%lys,Ps
+    if VERBOSE[3]:print("Points (%d): "%lys,Ps)
     return Ps
 
 def cIe(F1,F2):
@@ -726,11 +726,11 @@ def ellipseSegmentOriented(F,P1,P2,sgn=+1):
     """
     
     if VERBOSE[2]:VERB("ellipseSegmentOriented")
-    if VERBOSE[2]:print "Ellipse Segment between points (sgn = %d): "%sgn,P1,P2
+    if VERBOSE[2]:print("Ellipse Segment between points (sgn = %d): "%sgn,P1,P2)
     q1=pointInFigure(F,P1)
     q2=pointInFigure(F,P2)
-    if VERBOSE[2]:print "Condition point 1:",q1
-    if VERBOSE[2]:print "Condition point 2:",q2
+    if VERBOSE[2]:print("Condition point 1:",q1)
+    if VERBOSE[2]:print("Condition point 2:",q2)
     if q1<-FIGTOL or q2<-FIGTOL:
         return 0
 
@@ -744,17 +744,17 @@ def ellipseSegmentOriented(F,P1,P2,sgn=+1):
     t1=ARCTAN(dr1[1]/b,dr1[0]/a)
     t2=ARCTAN(dr2[1]/b,dr2[0]/a)
     dt=abs(t2-t1)
-    if VERBOSE[3]:print "t1,t2,dt = ",t1*RAD,t2*RAD,dt*RAD
+    if VERBOSE[3]:print("t1,t2,dt = ",t1*RAD,t2*RAD,dt*RAD)
 
     #FAKE SEGMENT
     if t1==t2:
         if pointInFigure(F,P1)<ZERO:
-            if VERBOSE[3]:print "Segment closed."
+            if VERBOSE[3]:print("Segment closed.")
             if sgn<0:
-                if VERBOSE[3]:print "Minor curve: All area."
+                if VERBOSE[3]:print("Minor curve: All area.")
                 return pi*a*b
             if sgn>0:
-                if VERBOSE[3]:print "Major curve: No area."
+                if VERBOSE[3]:print("Major curve: No area.")
                 return 0.0
         if t1>pi:return -123
         if t1<pi:return +123
@@ -821,8 +821,8 @@ def montecarloArea(Fs,oper,Npoints=1E3,excl=1):
         ys=concatenate((ys,(a*cosEs*sint+b*sinEs*cost)+y))
     xmin=xs.min();xmax=xs.max()
     ymin=ys.min();ymax=ys.max()
-    if VERBOSE[0]:print "Montecarlo xmin,xmax = ",xmin,xmax
-    if VERBOSE[0]:print "Montecarlo ymin,ymax = ",ymin,ymax
+    if VERBOSE[0]:print("Montecarlo xmin,xmax = ",xmin,xmax)
+    if VERBOSE[0]:print("Montecarlo ymin,ymax = ",ymin,ymax)
 
     #COMPUTE AREA
     xs=[];ys=[]
@@ -862,42 +862,42 @@ def convexTriangle(Ps,shapes=[+1,+1,+1]):
 
     #Side 12
     if shapes[0]==0:
-        if VERBOSE[3]:print "P1,P2 is plane."
+        if VERBOSE[3]:print("P1,P2 is plane.")
         A1=0
     else:
         Fs=commonFigs(P1,P2)
-        if VERBOSE[3]:print "P1,P2 common figures: ",figNames(Fs)
+        if VERBOSE[3]:print("P1,P2 common figures: ",figNames(Fs))
         try:A1=min([ellipseSegment(F,P1,P2) for F in Fs])
         except IndexError:A1=0
-        if VERBOSE[3]:print "A1 = ",A1
+        if VERBOSE[3]:print("A1 = ",A1)
 
     #Side 23
     if shapes[1]==0:
-        if VERBOSE[3]:print "P2,P3 is plane."
+        if VERBOSE[3]:print("P2,P3 is plane.")
         A2=0
     else:
         Fs=commonFigs(P2,P3)
-        if VERBOSE[3]:print "P2,P3 common figures: ",figNames(Fs)
+        if VERBOSE[3]:print("P2,P3 common figures: ",figNames(Fs))
         try:A2=min([ellipseSegment(F,P2,P3) for F in Fs])
         except IndexError:A2=0
-        if VERBOSE[3]:print "A2 = ",A2
+        if VERBOSE[3]:print("A2 = ",A2)
 
     #Side 31
     if shapes[2]==0:
-        if VERBOSE[3]:print "P3,P1 is plane."
+        if VERBOSE[3]:print("P3,P1 is plane.")
         A3=0
     else:
         Fs=commonFigs(P3,P1)
-        if VERBOSE[3]:print "P3,P1 common figures: ",figNames(Fs)
+        if VERBOSE[3]:print("P3,P1 common figures: ",figNames(Fs))
         try:A3=min([ellipseSegment(F,P3,P1) for F in Fs])
         except IndexError:A3=0
-        if VERBOSE[3]:print "A2 = ",A3
+        if VERBOSE[3]:print("A2 = ",A3)
         
     Ac=A1+A2+A3
-    if VERBOSE[3]:print "Curved Area = ",Ac
+    if VERBOSE[3]:print("Curved Area = ",Ac)
 
     At=planeTriangle(Ps)
-    if VERBOSE[3]:print "Plane Area = ",At
+    if VERBOSE[3]:print("Plane Area = ",At)
 
     return At+Ac
     
@@ -915,57 +915,57 @@ def convexQuad(Ps,shapes=[+1,+1,+1,+1]):
 
     P1,P2,P3,P4=Ps
 
-    if VERBOSE[3]:print "Convex Quadrangle:"
+    if VERBOSE[3]:print("Convex Quadrangle:")
 
     #Side 12
     if shapes[0]==0:
-        if VERBOSE[3]:print "P1,P2 is plane."
+        if VERBOSE[3]:print("P1,P2 is plane.")
         A12=0
     else:
         Fs=commonFigs(P1,P2)
-        if VERBOSE[3]:print "P1,P2 common figures: ",figNames(Fs)
+        if VERBOSE[3]:print("P1,P2 common figures: ",figNames(Fs))
         try:A12=min([ellipseSegment(F,P1,P2) for F in Fs])
         except IndexError:A12=0
-        if VERBOSE[3]:print "A12 = ",A12
+        if VERBOSE[3]:print("A12 = ",A12)
 
     #Side 23
     if shapes[1]==0:
-        if VERBOSE[3]:print "P2,P3 is plane."
+        if VERBOSE[3]:print("P2,P3 is plane.")
         A23=0
     else:
         Fs=commonFigs(P2,P3)
-        if VERBOSE[3]:print "P2,P3 common figures: ",figNames(Fs)
+        if VERBOSE[3]:print("P2,P3 common figures: ",figNames(Fs))
         try:A23=min([ellipseSegment(F,P2,P3) for F in Fs])
         except IndexError:A23=0
-        if VERBOSE[3]:print "A23 = ",A23
+        if VERBOSE[3]:print("A23 = ",A23)
 
     #Side 34
     if shapes[2]==0:
-        if VERBOSE[3]:print "P3,P4 is plane."
+        if VERBOSE[3]:print("P3,P4 is plane.")
         A34=0
     else:
         Fs=commonFigs(P3,P4)
-        if VERBOSE[3]:print "P3,P1 common figures: ",figNames(Fs)
+        if VERBOSE[3]:print("P3,P1 common figures: ",figNames(Fs))
         try:A34=min([ellipseSegment(F,P3,P4) for F in Fs])
         except IndexError:A34=0
-        if VERBOSE[3]:print "A34 = ",A34
+        if VERBOSE[3]:print("A34 = ",A34)
 
     #Side 41
     if shapes[3]==0:
-        if VERBOSE[3]:print "P4,P1 is plane."
+        if VERBOSE[3]:print("P4,P1 is plane.")
         A41=0
     else:
         Fs=commonFigs(P4,P1)
-        if VERBOSE[3]:print "P4,P1 common figures: ",figNames(Fs)
+        if VERBOSE[3]:print("P4,P1 common figures: ",figNames(Fs))
         try:A41=min([ellipseSegment(F,P4,P1) for F in Fs])
         except IndexError:A41=0
-        if VERBOSE[3]:print "A41 = ",A41
+        if VERBOSE[3]:print("A41 = ",A41)
         
     Ac=A12+A23+A34+A41
-    if VERBOSE[3]:print "Curved Area = ",Ac
+    if VERBOSE[3]:print("Curved Area = ",Ac)
     Aq=planeQuad(Ps)
 
-    if VERBOSE[3]:print "Plane Area = ",Aq
+    if VERBOSE[3]:print("Plane Area = ",Aq)
     return Aq+Ac
 
 def convexPolygon(Ps):
@@ -978,31 +978,31 @@ def convexPolygon(Ps):
     if VERBOSE[3]:VERB("convexPolygon")
     
     nP=len(Ps)
-    if VERBOSE[3]:print "Sides of the polygon: ",nP
+    if VERBOSE[3]:print("Sides of the polygon: ",nP)
     if nP<=1:
-        if VERBOSE[3]:print "No points."
+        if VERBOSE[3]:print("No points.")
         A=0.0
     elif nP==2:
-        if VERBOSE[3]:print "2 points: a leaf."
+        if VERBOSE[3]:print("2 points: a leaf.")
         A=leafArea(Ps)
     elif nP==3:
-        if VERBOSE[3]:print "3 points: a triangle."
+        if VERBOSE[3]:print("3 points: a triangle.")
         A=convexTriangle(Ps)
     elif nP==4:
-        if VERBOSE[3]:print "4 points: a quadrangle."
+        if VERBOSE[3]:print("4 points: a quadrangle.")
         A=convexQuad(Ps)
     elif nP==5:
-        if VERBOSE[3]:print "5 points: a pentagon."
+        if VERBOSE[3]:print("5 points: a pentagon.")
         A1=convexQuad(Ps[:4],shapes=[+1,+1,+1,0])
         A2=convexTriangle((Ps[0],Ps[3],Ps[4]),shapes=[0,+1,+1])
         A=A1+A2
     elif nP==6:
-        if VERBOSE[3]:print "6 points: a hexagon."
+        if VERBOSE[3]:print("6 points: a hexagon.")
         A1=convexQuad((Ps[:4]),shapes=[+1,+1,+1,0])
         A2=convexQuad((Ps[0],Ps[3],Ps[4],Ps[5]),shapes=[0,+1,+1,+1])
         A=A1+A2
     else:
-        print "An excessive number of polygon sides."
+        print("An excessive number of polygon sides.")
     return A
         
 def leafArea(Ps):
@@ -1022,28 +1022,28 @@ def leafArea(Ps):
         AF=AF1
     else:AF=AF2
 
-    if VERBOSE[1]:print "Figures: ",F1,F2
-    if VERBOSE[1]:print "Larger figure (+1 if F1): ",sgn
+    if VERBOSE[1]:print("Figures: ",F1,F2)
+    if VERBOSE[1]:print("Larger figure (+1 if F1): ",sgn)
 
     #CHECK IF POINTS ARE SPECIAL
     if Ps[0].pos[0]==123:
         #SMALLER FIGURE INSIDE
-        if VERBOSE[1]:print "Small figure completely inside."
+        if VERBOSE[1]:print("Small figure completely inside.")
         return AF
     elif Ps[0].pos[0]==-123:
         #SMALLER FIGURE OUTSIDE
-        if VERBOSE[1]:print "Small figure completely outside."
+        if VERBOSE[1]:print("Small figure completely outside.")
         return 0
 
     Pspos=[P.pos for P in Ps]
-    if VERBOSE[1]:print "Points: ",pointNames(Ps)
-    if VERBOSE[1]:print "Point positions: ",Pspos
+    if VERBOSE[1]:print("Points: ",pointNames(Ps))
+    if VERBOSE[1]:print("Point positions: ",Pspos)
 
     A1=ellipseSegmentOriented(F1,Ps[0],Ps[1],sgn=sgn)
     A2=ellipseSegmentOriented(F2,Ps[0],Ps[1],sgn=-sgn)
     if A1==0 and A2==0:return 0
-    if VERBOSE[1]:print "Segment 1 Area: ",A1
-    if VERBOSE[1]:print "Segment 2 Area: ",A2
+    if VERBOSE[1]:print("Segment 1 Area: ",A1)
+    if VERBOSE[1]:print("Segment 2 Area: ",A2)
 
     if sgn>0:
         if A2==-123:return FIGUREAREA(F2)
@@ -1201,9 +1201,9 @@ def transitArea(S):
     #////////////////////////////////////////
     if Rea==0 or Reb/Rea<NORINGTOL:
         if VERBLIMB or False:
-            print TAB,"Psp = ",\
-                Psp1.pos,Psp2.pos
-            print TAB,"Asp = ",Asp
+            print((TAB,"Psp = ",\
+                Psp1.pos,Psp2.pos))
+            print(TAB,"Asp = ",Asp)
         return Asp,Asp,0,0,0,0,Psa,Feqs
 
     #////////////////////////////////////////
@@ -1297,14 +1297,14 @@ def transitArea(S):
     else:Asric=convexPolygon(Pini)
 
     if VERBLIMB or False:
-        print TAB,"Asp = ",Asp
-        print TAB,"Asre = ",Asre
-        print TAB,"Asri = ",Asri
-        print TAB,"Asrec = ",Asrec
-        print TAB,"Asric = ",Asric
-        print TAB,"Psre = ",\
+        print(TAB,"Asp = ",Asp)
+        print(TAB,"Asre = ",Asre)
+        print(TAB,"Asri = ",Asri)
+        print(TAB,"Asrec = ",Asrec)
+        print(TAB,"Asric = ",Asric)
+        print((TAB,"Psre = ",\
             Psre1.pos,Psre2.pos,\
-            Psre3.pos,Psre4.pos
+            Psre3.pos,Psre4.pos))
 
     #////////////////////////////////////////
     #TRANSIT AREA
@@ -1462,10 +1462,10 @@ def transitAreaMontecarlo(Planet,Ringe,Ringi,NP=1E3):
 
     mA1,dA1,xs1,ys1=montecarloArea([Star,Ringe,Planet,Ringi],
                                    [+1,+1,-1,-1],Npoints=NP)
-    print 2*TAB,"Montecarlo Ringed Area: %.17e"%(mA1)
+    print(2*TAB,"Montecarlo Ringed Area: %.17e"%(mA1))
     mA2,dA2,xs2,ys2=montecarloArea([Star,Planet],
                                    [+1,+1],Npoints=NP)
-    print 2*TAB,"Montecarlo Planet Area: %.17e"%(mA2)
+    print(2*TAB,"Montecarlo Planet Area: %.17e"%(mA2))
     #xs2=[];ys2=[]
     #xs1=[];ys1=[]
 
@@ -1580,7 +1580,7 @@ def uniqueReals(xs,xtol=1E-3):
     ilen=len(es)
     ns=[]
     while ilen>0:
-        ies=array(range(ilen))
+        ies=array(list(range(ilen)))
         ns+=[es[0]]
         dx=abs(es[0]-es)
         cond=dx<=xtol
@@ -1593,13 +1593,13 @@ def uniqueRoots(Es,F,xtol=1E-3):
     Er=sort(Es)
     fEr=trigFunc(Er,F)
     dEr=trigFuncD(Er,F)
-    zEs=array(zip(Er,fEr,dEr))
+    zEs=array(list(zip(Er,fEr,dEr)))
     i=0
     clusters=[]
 
     while len(zEs)>0:
         ilen=len(zEs)
-        ies=array(range(ilen))
+        ies=array(list(range(ilen)))
         #if VERB:print "ies = ",ies
         zE=zEs[0]
         #if VERB:print "zE = ",zE*RAD
@@ -1637,7 +1637,7 @@ def uniqueRoots(Es,F,xtol=1E-3):
             #if VERB:print "Derivative = ",droot
             #if VERB:print "Cummulative roots = ",roots
             if ilen>1:
-                ies=array(range(ilen))
+                ies=array(list(range(ilen)))
                 cond=droot*cluster[:,2]>=0
                 ires=ies[cond]
             else:
@@ -1958,7 +1958,7 @@ def derivedSystemProperties(S):
     S.orbit=Orbit(S.ap/S.Rstar,S.ep,S.Porb,S.Mos)
     
     if abs(S.Borb)>1:
-        print "This configuration does not lead to a transit."
+        print("This configuration does not lead to a transit.")
         exit(1)
         
     S.C=AR(0,0)
@@ -2069,52 +2069,52 @@ def updatePlanetRings(S,phir=123,ir=123):
                             sgn=FARTHEST)
 
     if df>1:
-        print "Grazing configuration."
+        print("Grazing configuration.")
         S.grazing=1
     else:
         S.grazing=0
     
 def systemShow(S):
     pass
-    print "Star primary:"
-    print TAB,"Ms = %e kg"%S.Mstar
-    print TAB,"Rs = %e kg"%S.Rstar
-    print "Planet primary:"
-    print TAB,"Mp = %e kg = %e Mstar"%(S.Mplanet,
-                                       S.Mplanet/S.Mstar)
-    print TAB,"Rp = %e kg = %e Rstar"%(S.Rplanet,
-                                       S.Rplanet/S.Rstar)
-    print "Rings primary:"
-    print TAB,"fi,fe = %e,%e Rp"%(S.fi,S.fe)
-    print TAB,"Inclination (orbit) = %.1f deg"%(S.ir*RAD)
-    print TAB,"Roll (orbit) = %.1f deg"%(S.phir*RAD)
-    print TAB,"Opacity = %.2f"%(S.tau)
-    print "Orbit primary:"
-    print TAB,"ap = %e km = %e AU = %e Rstar"%(S.ap,
+    print("Star primary:")
+    print(TAB,"Ms = %e kg"%S.Mstar)
+    print(TAB,"Rs = %e kg"%S.Rstar)
+    print("Planet primary:")
+    print((TAB,"Mp = %e kg = %e Mstar"%(S.Mplanet,
+                                       S.Mplanet/S.Mstar)))
+    print((TAB,"Rp = %e kg = %e Rstar"%(S.Rplanet,
+                                       S.Rplanet/S.Rstar)))
+    print("Rings primary:")
+    print(TAB,"fi,fe = %e,%e Rp"%(S.fi,S.fe))
+    print(TAB,"Inclination (orbit) = %.1f deg"%(S.ir*RAD))
+    print(TAB,"Roll (orbit) = %.1f deg"%(S.phir*RAD))
+    print(TAB,"Opacity = %.2f"%(S.tau))
+    print("Orbit primary:")
+    print((TAB,"ap = %e km = %e AU = %e Rstar"%(S.ap,
                                                S.ap/AU,
-                                               S.ap/S.Rstar)
-    print TAB,"Eccentricity = %.2f"%(S.ep)
-    print TAB,"Inclination (visual) = %.2f deg"%(S.iorb*RAD)
-    print TAB,"Periapsis argument = %.2f deg"%(S.wp*RAD)
-    print
-    print "Star derivative:"
-    print "Planetary derivative:"
-    print TAB,"Radius (relative) = %e Rstar"%(S.Rp)
-    print "Rings derivative:"
-    print TAB,"Internal ring (relative) = %.2f Rstar"%(S.Ri)
-    print TAB,"External ring (relative) = %.2f Rstar"%(S.Re)
-    print TAB,"Apparent inclination = %.2f deg"%(S.ieff*RAD)
-    print TAB,"Apparent roll = %.2f deg"%(S.teff*RAD)
-    print "Orbit derivative:"
-    print TAB,"Period = %e s = %e h = %e d = %e yr"%(S.Porb,S.Porb/HOUR,S.Porb/DAY,S.Porb/YEAR)
-    print TAB,"Mean Angular velocity = %e rad/s = %e Rstar/s = %e Rp/s"%(S.norb,S.norb*S.rcen/S.Rstar,S.norb*S.rcen/(S.Rp*S.Rstar))
-    print TAB,"Central true anomaly = %e deg"%(S.fcen*RAD)
-    print TAB,"Central eccentric anomaly = %e deg"%(S.Ecen*RAD)
-    print TAB,"Central mean anomaly = %e deg"%(S.Mcen*RAD)
-    print TAB,"Central radius = %e km = %e AU = %e Rstar"%(S.rcen,S.rcen/AU,S.rcen/S.Rstar)
-    print TAB,"Impact parameter = %e Rstar"%(S.Borb)
-    print TAB,"Central time = %e s = %e Porb"%(S.tcen,S.tcen/S.Porb)
-    print TAB,"Estimated transit duration = %e s = %e h"%(S.dtrans,S.dtrans/3600.0)
+                                               S.ap/S.Rstar)))
+    print(TAB,"Eccentricity = %.2f"%(S.ep))
+    print(TAB,"Inclination (visual) = %.2f deg"%(S.iorb*RAD))
+    print(TAB,"Periapsis argument = %.2f deg"%(S.wp*RAD))
+    print()
+    print("Star derivative:")
+    print("Planetary derivative:")
+    print(TAB,"Radius (relative) = %e Rstar"%(S.Rp))
+    print("Rings derivative:")
+    print(TAB,"Internal ring (relative) = %.2f Rstar"%(S.Ri))
+    print(TAB,"External ring (relative) = %.2f Rstar"%(S.Re))
+    print(TAB,"Apparent inclination = %.2f deg"%(S.ieff*RAD))
+    print(TAB,"Apparent roll = %.2f deg"%(S.teff*RAD))
+    print("Orbit derivative:")
+    print(TAB,"Period = %e s = %e h = %e d = %e yr"%(S.Porb,S.Porb/HOUR,S.Porb/DAY,S.Porb/YEAR))
+    print(TAB,"Mean Angular velocity = %e rad/s = %e Rstar/s = %e Rp/s"%(S.norb,S.norb*S.rcen/S.Rstar,S.norb*S.rcen/(S.Rp*S.Rstar)))
+    print(TAB,"Central true anomaly = %e deg"%(S.fcen*RAD))
+    print(TAB,"Central eccentric anomaly = %e deg"%(S.Ecen*RAD))
+    print(TAB,"Central mean anomaly = %e deg"%(S.Mcen*RAD))
+    print(TAB,"Central radius = %e km = %e AU = %e Rstar"%(S.rcen,S.rcen/AU,S.rcen/S.Rstar))
+    print(TAB,"Impact parameter = %e Rstar"%(S.Borb))
+    print(TAB,"Central time = %e s = %e Porb"%(S.tcen,S.tcen/S.Porb))
+    print(TAB,"Estimated transit duration = %e s = %e h"%(S.dtrans,S.dtrans/3600.0))
 
 def updatePosition(S,t):
     S.t=t
@@ -2402,51 +2402,51 @@ def secureArange(x1,x2,dx):
 def fluxLimbTime(t,Ar,S,areas=areaStriping):
     #UPDATE POSITION
     updatePosition(S,t)
-    if VERBLIMB:print "\nTime: ",(t-S.tcen)/HOUR
-    if VERBLIMB:print "Center: ",S.Planet.C
+    if VERBLIMB:print("\nTime: ",(t-S.tcen)/HOUR)
+    if VERBLIMB:print("Center: ",S.Planet.C)
 
     #EXTREMES
     dc,df=extremePointsMultiple((S.Planet,S.Ringext))
-    if VERBLIMB:print "Extremes:",dc,df
+    if VERBLIMB:print("Extremes:",dc,df)
     if dc>1:
-        if VERBLIMB:print "No transit."
+        if VERBLIMB:print("No transit.")
         return 1.0
     
     #LIMB STRIPING
     deltad=(df-dc)/NLIMBSAMPLING
     ds=secureArange(dc,min(1,df),deltad)
     #ds=limbStriping(ds,S.c1,S.c2)
-    if VERBLIMB:print "Sampling points: ",ds
+    if VERBLIMB:print("Sampling points: ",ds)
     if len(ds)==2 and df<1:
-        if VERBLIMB:print "Whole area, t = %e"%((t-S.tcen)/HOUR)
+        if VERBLIMB:print("Whole area, t = %e"%((t-S.tcen)/HOUR))
         ds=array([ds[0],0.5*(ds[0]+ds[1]),ds[1]])
         #Ats=[Ar]
     #else:
     Ats=areas(S,ds)
     if VERBLIMB:
         if len(array(Ats)[array(Ats)<0])>0:
-            print 2*TAB,"** NEGATIVE AREA **"
+            print(2*TAB,"** NEGATIVE AREA **")
     dss=0.5*(ds[:-1]+ds[1:])
     iss=limbDarkeningNormalized(dss,S.c1,S.c2)
-    if VERBLIMB:print "Areas: ",Ats
-    if VERBLIMB:print "**Check Area: ",array(Ats).sum()," (compared to :",Ar,")"
-    if VERBLIMB:print "Limb darkening: ",iss
+    if VERBLIMB:print("Areas: ",Ats)
+    if VERBLIMB:print("**Check Area: ",array(Ats).sum()," (compared to :",Ar,")")
+    if VERBLIMB:print("Limb darkening: ",iss)
     #raw_input()
     ifs=Ats*iss
     iF=ifs.sum()
-    if VERBLIMB:print "Weighted area: ",ifs
-    if VERBLIMB:print "Residual flux: ",iF
+    if VERBLIMB:print("Weighted area: ",ifs)
+    if VERBLIMB:print("Residual flux: ",iF)
     #raw_input()
     return 1-iF
 
 def histPosterior(xs,Nsamples,nbins=5,**args):
     Ntotal=len(xs)
-    Npoints=Ntotal/Nsamples
+    Npoints=int(Ntotal/Nsamples)
     HS=zeros((nbins,Nsamples))
     xmin=min(xs)
     xmax=max(xs)
     bins=linspace(xmin,xmax,nbins+1)
-    for i in xrange(Nsamples):
+    for i in range(Nsamples):
         j=i*Npoints
         points=xs[j:j+Npoints]
         hs,bs=histogram(points,bins=bins,**args)
@@ -2459,7 +2459,7 @@ def histPlot(ax,xs,hs,dhs,error=True,
              color='b',alpha=0.3,**args):
 
     xmsvec=[]
-    for i in xrange(len(xs)-1):
+    for i in range(len(xs)-1):
         xfs=[xs[i],xs[i],xs[i+1],xs[i+1]]
         xms=0.5*(xs[i]+xs[i+1])
         xmsvec+=[xms]
@@ -2544,7 +2544,7 @@ def shell_exec(cmd,out=True):
         system(cmd)
         output=""
     else:
-        output=commands.getoutput(cmd)
+        output=subprocess.getoutput(cmd)
     return output
 
 def savetxtheader(filename,header,data,**args):
@@ -2637,13 +2637,13 @@ def softArraySG(y,frac=5,nP=7,deriv=0, rate=1):
     try:
         window_size = np.abs(np.int(window_size))
         order = np.abs(np.int(order))
-    except ValueError, msg:
+    except ValueError as msg:
         raise ValueError("window_size and order have to be of type int")
     if window_size % 2 != 1 or window_size < 1:
         raise TypeError("window_size size must be a positive odd number")
     if window_size < order + 2:
         raise TypeError("window_size is too small for the polynomials order")
-    order_range = range(order+1)
+    order_range = list(range(order+1))
     half_window = (window_size -1) // 2
     # precompute coefficients
     b = np.mat([[k**i for i in order_range] for k in range(-half_window, half_window+1)])
@@ -2712,3 +2712,97 @@ def offSet(dx,dy):
     toff=offset_copy(ax.transData,fig=fig,
                      x=dx,y=dy,units='dots')
     return toff
+
+def transitPosition(Rp,fe,i,t,B,direction=+1,sign=+1,qcorrected=False):
+    """
+    direction = +1 (out of disk), -1 (toward disk)
+    sign: -1 (before contact), +1 (after contact)
+    
+    Example:
+      Contact 1: direction=-1, sign=-1
+      Contact 2: direction=-1, sign=+1
+      Contact 3: direction=+1, sign=-1
+      Contact 4: direction=+1, sign=+1
+    """
+    a=fe*Rp
+    b=fe*Rp*cos(i)
+
+    if qcorrected:
+        if cos(i)>0.6:
+            xp=direction*sqrt((1+direction*sign*a)**2-B**2)
+            return xp
+
+    a=fe*Rp
+    b=fe*Rp*cos(i)
+
+    xp=direction*sqrt(1-a**2*(sin(t)-sign*B/a)**2*\
+                          (1-b**2/a))+\
+                          sign*a*cos(t)
+
+    #COMPARE WITH THE NOT-RINGED CASE
+    xpP=direction*sqrt((1+direction*sign*Rp)**2-B**2)
+    if sign<0:
+        if xpP<xp:xp=xpP
+    else:
+        if xpP>xp:xp=xpP
+    return xp
+
+class Figure(object):
+    def __init__(self,C,a,b,ct,st,name):
+        self.C=C
+        self.a=a
+        self.b=b
+        self.cost=ct
+        self.sint=st
+        self.name=name
+
+def plotEllipse(ax,F,patch=False,**args):
+    """
+    Plot ellipse.  Optional arguments are for "plot" command.
+    """
+    C=F.C
+    a=F.a
+    b=F.b
+    if patch:
+        cir=pat.Circle((F.C[0],F.C[1]),F.a,**args)
+        ax.add_patch(cir)
+    else:
+        Es=linspace(0,2*pi,1000)
+        xs=a*cos(Es)
+        ys=b*sin(Es)
+        rs=array([rotTrans(AR(x,y),F.cost,F.sint,C) for x,y in zip(xs,ys)])
+        ax.plot(rs[:,0],rs[:,1],'-',**args)
+
+def plotPlanets(ax,S,Nx=5,Ny=5,
+                xmin=0.0,scalex=1.0,ymin=0,scaley=90,
+                yoffset=0,
+                fh=0,fv=0):
+    if Nx>2:
+        dc=scalex/(Nx-1)
+        cieffs=arange(xmin,xmin+scalex+dc,dc)
+    else:
+        cieffs=array([xmin])
+    if Ny>2:
+        dt=scaley/(Ny-1)
+        teffs=arange(ymin,ymin+scaley+dt,dt)*DEG
+    else:
+        teffs=array([ymin])
+
+    if fh==0:
+        fh=0.03/S.Rp
+    if fv==0:
+        fv=fh
+
+    for cieff in cieffs:
+        ieff=arccos(cieff)
+        for teff in teffs:
+            x=(cieff-xmin)/scalex
+            y=(teff*RAD-ymin)/scaley+yoffset
+            C=AR(x,y)
+            Planet=Figure(C,fh*S.Rp,fv*S.Rp,1.0,0.0,'Planet')
+            Ringe=Figure(C,fh*S.Re,fv*S.Re*cos(ieff),cos(teff),sin(teff),'Ringext')
+            Ringi=Figure(C,fh*S.Ri,fv*S.Ri*cos(ieff),cos(teff),sin(teff),'Ringint')
+            plotEllipse(ax,Planet,patch=True,zorder=10,color='k',transform=ax.transAxes)
+            plotEllipse(ax,Ringe,zorder=10,color='k',transform=ax.transAxes)
+            plotEllipse(ax,Ringi,zorder=10,color='k',transform=ax.transAxes)
+
