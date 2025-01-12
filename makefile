@@ -11,7 +11,7 @@ clean:
 	@-find . -name ".DS_Store" -exec rm -rf {} \;
 
 cleandata:
-	@-find . -name "__pycache__" -exec rm -rf {} \;
+	@-find . -name "__pycache__" -exec rm -rf {} \; >& /dev/null
 	@-rm -rf confs/* tmp/* plots/*
 
 cleanall:clean cleandata

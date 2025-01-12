@@ -1,74 +1,25 @@
 """Compute photoring effect
 """
-from geotrans import *
+from geotrans2 import *
 import numpy as np
 
-# System properties
-S=dict2obj(dict(\
-#########################################
-#SYSTEM PRIMARY PARAMETERS
-#########################################
-#//////////////////////////////
-#DETECTOR
-#//////////////////////////////
-Ddet=0.5,#Aperture, m
-qeff=1.0,#Quantum efficiency
-#//////////////////////////////
-#STAR
-#//////////////////////////////
-Mstar=1.0*MSUN,
-Rstar=1.0*RSUN,
-Lstar=1.0*LSUN,
-Tstar=1.0*TSUN,
-Dstar=1*KILO*PARSEC,
-c1=0.70,#Limb Darkening
-c2=-0.24,#Limb Darkening
-#//////////////////////////////
-#ORBIT
-#//////////////////////////////
-ap=1.0*AU,
-ep=0.0,
-iorb=90.0*DEG,
-wp=0.0*DEG,
-#//////////////////////////////
-#PLANET
-#//////////////////////////////
-Mplanet=1.0*MSAT,
-Rplanet=1.0*RSAT,
-fp=0.0, #Oblateness
-#//////////////////////////////
-#RINGS
-#//////////////////////////////
-fe=RSAT_ARING/RSAT, #Exterior ring (Rp)
-fi=RSAT_BRING/RSAT, #Interior ring (Rp)
-ir=45.0*DEG, #Ring inclination
-phir=45.0*DEG, #Ring roll angle
-tau=1.0, #Opacity
-))
-
-#########################################
-#SYSTEM DERIVATIVE PARAMETERS
-#########################################
-derivedSystemProperties(S)
-updatePlanetRings(S)
-updatePosition(S,S.tcen)
-
-#########################################
-#PHOTORING
-#########################################
-rho_true=S.Mstar/(4*pi/3*S.Rstar**3)
-
-#NUMERICAL
-tcsp=contactTimes(S)
-tT=(tcsp[-1]-tcsp[1])/HOUR
-tF=(tcsp[-2]-tcsp[2])/HOUR
-
-p=ringedPlanetArea(S)/pi
-rho_obs=rhoObserved_Seager(p,
-                           S.Rstar,
-                           tT,tF,
-                           S.Porb/HOUR)
-PR = np.log10(rho_obs/rho_true)
-
+S = RingedSystem(
+    system=dict(
+        Mstar=1.0*MSUN,
+        Rstar=1.0*RSUN,
+        Lstar=1.0*LSUN, 
+        ap=1.0*AU, #Semi-major axis
+        iorb=90.0*DEG, #Orbital inclination
+        Rplanet=1.0*RSAT, #Planet radius
+        fe=RSAT_ARING/RSAT, #Exterior ring (Rp)
+        fi=RSAT_BRING/RSAT, #Interior ring (Rp)
+        ir=45.0*DEG, #Ring inclination
+        phir=45.0*DEG, #Ring roll angle
+        tau=1.0, #Opacity        
+    )
+)
+S.fe=1
+S.tau=0
+PR = S.PR()
 print(np.cos(S.ieff),S.teff*RAD)
-print(rho_true,rho_obs,PR)
+print(S.rho_true,S.rho_obs,PR)
