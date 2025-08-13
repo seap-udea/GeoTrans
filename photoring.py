@@ -20,6 +20,6 @@ S = RingedSystem(
 )
 S.fe=1
 S.tau=0
-PR = S.PR()
+PR = S.calculate_PR()
 print(np.cos(S.ieff),S.teff*RAD)
 print(S.rho_true,S.rho_obs,PR)
